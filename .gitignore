@@ -1,0 +1,31 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+env/
+*.egg-info/
+
+# Flask
+instance/
+.flask_session/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editors
+.vscode/
+.idea/
+*.swp
+
+# Logs
+*.log
+
+# Data (raw source kept out of git if large; processed output is small and useful to keep)
+# Uncomment the next line if the raw CSV is too large for your repo host:
+# data/raw/*.csv
+
+# Env
+.env

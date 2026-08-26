@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Card Explorer — Pokémon TCG 1999–2023</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<header class="site-header">
+  <div class="header-inner">
+    <div class="brand">
+      <span class="brand-mark">TCG</span>
+      <div class="brand-text">
+        <h1>Card Explorer</h1>
+        <p>Pokémon Trading Card Game catalog, 1999–2023</p>
+      </div>
+    </div>
+    <div id="conn-status" class="conn-status">
+      <span class="dot"></span>
+      <span class="conn-label">Connecting…</span>
+    </div>
+  </div>
+</header>
+
+<main>
+
+  <section class="stat-strip" id="stat-strip" aria-label="Dataset overview">
+    <div class="stat-card">
+      <span class="stat-label">Cards</span>
+      <span class="stat-value" id="stat-total-cards">—</span>
+    </div>
+    <div class="stat-card">
+      <span class="stat-label">Sets</span>
+      <span class="stat-value" id="stat-total-sets">—</span>
+    </div>
+    <div class="stat-card">
+      <span class="stat-label">Series</span>
+      <span class="stat-value" id="stat-total-series">—</span>
+    </div>
+    <div class="stat-card">
+      <span class="stat-label">Artists</span>
+      <span class="stat-value" id="stat-total-artists">—</span>
+    </div>
+    <div class="stat-card">
+      <span class="stat-label">Years covered</span>
+      <span class="stat-value" id="stat-years">—</span>
+    </div>
+    <div class="stat-card">
+      <span class="stat-label">Avg HP</span>
+      <span class="stat-value" id="stat-avg-hp">—</span>
+    </div>
+  </section>
+
+  <section class="showcase" aria-label="Catalog analytics">
+    <h2 class="section-title">Showcase pages</h2>
+    <div class="showcase-grid">
+      <div class="showcase-page">
+        <div class="page-tab">01 — Rarity</div>
+        <h3>Cards by rarity</h3>
+        <div class="chart-wrap"><canvas id="chart-rarity"></canvas></div>
+      </div>
+      <div class="showcase-page">
+        <div class="page-tab">02 — Type</div>
+        <h3>Cards by energy type</h3>
+        <div class="chart-wrap"><canvas id="chart-type"></canvas></div>
+      </div>
+      <div class="showcase-page wide">
+        <div class="page-tab">03 — Timeline</div>
+        <h3>Cards printed per year</h3>
+        <div class="chart-wrap"><canvas id="chart-year"></canvas></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="binder" id="binder-section" aria-label="Card catalog">
+    <div class="binder-header">
+      <h2 class="section-title">Binder</h2>
+      <div class="result-count" id="result-count">Loading…</div>
+    </div>
+
+    <div class="binder-layout">
+
+      <aside class="tab-panel" aria-label="Filters">
+        <div class="tab-panel-inner">
+
+          <div class="filter-group">
+            <label for="f-search" class="tab-label">Search</label>
+            <input type="text" id="f-search" placeholder="Card name…" autocomplete="off">
+          </div>
+
+          <div class="filter-group">
+            <label for="f-supertype" class="tab-label">Card type</label>
+            <select id="f-supertype">
+              <option value="">All</option>
+            </select>
+          </div>
+
+          <div class="filter-group">
+            <label for="f-series" class="tab-label">Series</label>
+            <select id="f-series">
+              <option value="">All</option>
+            </select>
+          </div>
+
+          <div class="filter-group">
+            <label for="f-set" class="tab-label">Set</label>
+            <select id="f-set">
+              <option value="">All</option>
+            </select>
+          </div>
+
+          <div class="filter-group">
+            <label for="f-rarity" class="tab-label">Rarity</label>
+            <select id="f-rarity">
+              <option value="">All</option>
+            </select>
+          </div>
+
+          <div class="filter-group">
+            <label for="f-type" class="tab-label">Energy type</label>
+            <select id="f-type">
+              <option value="">All</option>
+            </select>
+          </div>
+
+          <div class="filter-group">
+            <label class="tab-label">Release year</label>
+            <div class="range-row">
+              <input type="number" id="f-year-from" placeholder="From" inputmode="numeric">
+              <span class="range-dash">–</span>
+              <input type="number" id="f-year-to" placeholder="To" inputmode="numeric">
+            </div>
+          </div>
+
+          <button id="f-clear" class="clear-btn" type="button">Clear filters</button>
+        </div>
+      </aside>
+
+      <div class="pocket-area">
+        <div class="pocket-toolbar">
+          <div class="sort-row">
+            <label for="f-sort" class="tab-label">Sort by</label>
+            <select id="f-sort">
+              <option value="name">Name</option>
+              <option value="release_date">Release date</option>
+              <option value="hp">HP</option>
+              <option value="set">Set</option>
+              <option value="rarity">Rarity</option>
+            </select>
+            <button id="f-order" class="order-btn" type="button" data-order="asc" aria-label="Toggle sort order">↑ Asc</button>
+          </div>
+        </div>
+
+        <div id="pocket-grid" class="pocket-grid" aria-live="polite">
+          <!-- cards injected here -->
+        </div>
+
+        <div id="pocket-empty" class="pocket-empty hidden">
+          <p>No cards match these filters.</p>
+          <button id="empty-clear" class="clear-btn" type="button">Clear filters</button>
+        </div>
+
+        <div id="pocket-error" class="pocket-error hidden">
+          <p>Couldn't reach the API. Is the Flask server running on port 5000?</p>
+        </div>
+
+        <div class="pagination" id="pagination">
+          <button id="page-prev" type="button">← Prev</button>
+          <span id="page-info">Page 1</span>
+          <button id="page-next" type="button">Next →</button>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+</main>
+
+<footer class="site-footer">
+  <p>Data: Pokémon TCG API via Kaggle (adampq/pokemon-tcg-all-cards-1999-2023) · Built with Flask + pandas + Chart.js</p>
+</footer>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
