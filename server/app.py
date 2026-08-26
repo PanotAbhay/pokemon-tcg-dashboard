@@ -17,12 +17,13 @@ Endpoints:
 import os
 import math
 import pandas as pd
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify, request, send_from_directory
 from flask_cors import CORS
 
 DATA_PATH = os.path.join(os.path.dirname(__file__), "..", "data", "processed", "pokemon_cards_clean.csv")
+CLIENT_DIR = os.path.join(os.path.dirname(__file__), "..", "client")
 
-app = Flask(__name__)
+app = Flask(__name__, static_folder=CLIENT_DIR, static_url_path="")
 CORS(app)  # enable CORS for all routes so the client can be served separately
 
 # Load once at startup; the dataset is small enough (~17k rows) to keep in memory.
@@ -41,7 +42,9 @@ def clean_records(records):
 def error_response(message, status=400):
     return jsonify({"error": message}), status
 
-
+@app.route("/")
+def serve_client():
+    return send_from_directory(CLIENT_DIR, "index.html")
 @app.route("/api/health")
 def health():
     return jsonify({"status": "ok", "rows_loaded": len(df)})
