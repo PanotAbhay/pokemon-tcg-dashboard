@@ -1,162 +1,214 @@
 # Pokémon TCG Card Explorer
 
-A dashboard for browsing and analysing the Pokémon Trading Card Game catalog from 1999 to 2023 — search and filter 17,000+ cards, and explore rarity, type, and printing-volume trends over 25 years of sets.
+## Data Overview
 
-Built as a three-tier project: a pandas data-cleaning pipeline, a Flask REST API, and a vanilla HTML/CSS/JS client with Chart.js visualisations.
+The Pokémon TCG Card Explorer uses the **Pokémon TCG All Cards 1999–2023** dataset from Kaggle. The dataset contains **17,172 cards**, covering **156 sets** and **16 series**, with card information from 1999 to 2023.
 
----
+The product displays:
+- Card name
+- Set and series
+- Rarity
+- Pokémon type
+- Supertype
+- HP
+- Artist
+- Release date
+- Card counts and average HP
+- Rarity, type, set, and yearly distribution statistics
 
-## 1. Objectives
+The data requires basic processing before use. The raw CSV contains 29 columns, including nested fields that are not required by the dashboard. The processing pipeline removes unnecessary nested columns, converts stringified type lists into usable type fields, converts release dates into a consistent format, handles legitimate missing HP values for Trainer and Energy cards, removes invalid rows, and checks for duplicate card IDs. The processed dataset contains 15 columns used by the product.
 
-- Provide a searchable, filterable catalog of Pokémon TCG cards (name, set, series, rarity, type, HP, artist, release date).
-- Surface catalog-level trends: which rarities are most common, how card types are distributed, how print volume has grown year over year.
-- Demonstrate a clean data → API → UI pipeline: raw CSV → pandas cleaning → Flask REST endpoints → JSON → client-side charts and filtering.
+The dataset contains card attributes only. It does **not** contain card pricing information.
 
-## 2. Dataset
+## Product Architecture
 
-**Source:** [Pokémon TCG All Cards 1999–2023](https://www.kaggle.com/datasets/adampq/pokemon-tcg-all-cards-1999-2023) (Kaggle), built from the official Pokémon TCG API.
+### Architecture Diagram
 
-| | |
-|---|---|
-| Raw rows | 17,172 |
-| Raw columns | 29 |
-| Processed columns used | 15 |
-| Date range | 1999-01-09 to 2023 |
-| Sets | 156 |
-| Series | 16 |
-
-**Note:** this dataset contains card *attributes* (name, set, rarity, type, HP, artist, release date), not pricing data. An earlier plan to merge in a PriceCharting historic-pricing dataset was dropped after discovering it has no shared key (name/set) with any freely available card-attribute dataset — see "Data decisions" below.
-
-Sample of the cleaned data:
-
-![Dataset preview](docs/dataset_preview.png)
-
-### Data decisions
-
-- Dropped 14 deeply-nested columns not needed for this use case (`abilities`, `attacks`, `legalities`, `ancientTrait`, etc.) to keep the processed file lean and flat.
-- `types` and `subtypes` are stored in the raw CSV as stringified Python lists (e.g. `"['Fire', 'Flying']"`) — parsed with `ast.literal_eval` into a `primary_type` (first type) and `types_display` (comma-joined) column, since the game's multi-typing is rare and a scalar field is more useful for filtering/charting.
-- `hp` and `retreat_cost` are legitimately null for Trainer and Energy cards (they don't have HP). These are left as `null` rather than imputed to 0, since 0 would misleadingly read as "a Pokémon with 0 HP." The API converts `NaN` to JSON `null`.
-- Rows missing `name`, `set`, or an unparseable `release_date` are dropped (0 rows were affected — the source data was already clean).
-- Deduplicated on the card `id` (0 duplicates found).
-
-Full pipeline: [`server/data_loader.py`](server/data_loader.py).
-
-## 3. Architecture
-
-![Architecture diagram](docs/architecture_diagram.png)
-
+```text
+                    ┌──────────────────────────┐
+                    │      Raw CSV Dataset     │
+                    │    Pokémon TCG 1999–2023 │
+                    └────────────┬─────────────┘
+                                 │
+                                 ▼
+                    ┌──────────────────────────┐
+                    │     pandas Processing    │
+                    │    server/data_loader.py │
+                    └────────────┬─────────────┘
+                                 │
+                                 ▼
+                    ┌──────────────────────────┐
+                    │    Processed CSV / DB    │
+                    │       Data Storage       │
+                    └────────────┬─────────────┘
+                                 │
+                                 ▼
+                    ┌──────────────────────────┐
+                    │       Flask Server       │
+                    │        server/app.py     │
+                    └────────────┬─────────────┘
+                                 │
+                    ┌────────────┼────────────┐
+                    │            │            │
+                    ▼            ▼            ▼
+              /api/cards   /api/filters   /api/stats/*
+                    │            │            │
+                    └────────────┼────────────┘
+                                 │ JSON
+                                 ▼
+                    ┌──────────────────────────┐
+                    │       Web Client         │
+                    │ HTML + CSS + JavaScript  │
+                    │        + Chart.js        │
+                    └──────────────────────────┘
 ```
-pokemon-tcg-dashboard/
-├── data/
-│   ├── raw/pokemon_cards_raw.csv          # original Kaggle CSV
-│   └── processed/pokemon_cards_clean.csv  # cleaned output (generated)
-├── server/
-│   ├── app.py            # Flask app: REST endpoints, filtering, pagination
-│   ├── data_loader.py     # pandas cleaning pipeline
-│   └── requirements.txt
-├── client/
-│   ├── index.html
-│   ├── styles.css
-│   └── app.js             # fetch calls, Chart.js, filter/pagination state
-├── docs/                  # README images
-├── .gitignore
-└── README.md
-```
 
-**Data flow:** raw CSV → `data_loader.py` (pandas: parse, clean, dedupe) → processed CSV → loaded into memory by `app.py` at Flask startup → served as JSON over REST endpoints (with filtering, sorting, pagination) → fetched by `app.js` → rendered into the stat strip, Chart.js visualisations, and the card grid.
+### Components and Interactions
 
-## 4. API reference
+**Data processing:** Python with pandas is used in `server/data_loader.py` to clean and prepare the raw CSV.
 
-Base URL: `http://127.0.0.1:5000/api`
+**Server:** Python Flask is used in `server/app.py`. The server loads the processed data and provides JSON APIs for the web client. Flask-CORS allows the client and server to run on different local ports.
 
-| Endpoint | Description |
-|---|---|
-| `GET /health` | Server status + row count |
-| `GET /filters` | Distinct values for every filterable field (for populating dropdowns) |
-| `GET /cards` | Paginated card list. See query params below |
-| `GET /cards/<id>` | Single card detail |
-| `GET /stats/overview` | Headline numbers (total cards, sets, series, artists, avg HP) |
-| `GET /stats/by-rarity` | Card count + avg HP grouped by rarity |
-| `GET /stats/by-type` | Card count + avg HP grouped by primary type |
-| `GET /stats/by-set` | Card count + avg HP grouped by set (most recent N, default 20) |
-| `GET /stats/by-year` | Card count grouped by release year |
+**Web client:** The client uses **HTML, CSS, and vanilla JavaScript**. JavaScript uses `fetch()` to request JSON from Flask and Chart.js to display the data visually.
 
-**`/cards` query parameters** (all optional, chainable):
+### Three Main API Functions
 
-| Param | Type | Example |
-|---|---|---|
-| `q` | string, substring match on name | `q=charizard` |
-| `set` | exact match | `set=Base` |
-| `series` | exact match | `series=Sword & Shield` |
-| `rarity` | exact match | `rarity=Rare Holo` |
-| `type` | exact match on primary type | `type=Fire` |
-| `supertype` | Pokémon / Trainer / Energy | `supertype=Pokémon` |
-| `year_from`, `year_to` | int | `year_from=2015&year_to=2020` |
-| `hp_min`, `hp_max` | float | `hp_min=100` |
-| `sort_by` | column name | `sort_by=hp` |
-| `order` | `asc` \| `desc` | `order=desc` |
-| `page`, `page_size` | int (page_size max 200) | `page=2&page_size=25` |
+1. **Cards API: `/api/cards`**
+   - Returns the card catalogue as JSON.
+   - Supports search, filtering, sorting, and pagination.
+   - Filters include name, set, series, rarity, type, supertype, release year, and HP.
 
-Example: `GET /api/cards?set=Base&rarity=Rare Holo&sort_by=hp&order=desc&page_size=10`
+2. **Filters API: `/api/filters`**
+   - Returns the available values for filter fields.
+   - The web client uses these values to populate its filter controls.
 
-Errors return JSON (`{"error": "..."}`) with `400` for invalid input (e.g. bad `sort_by`) and `404` for a missing card.
+3. **Statistics API: `/api/stats/*`**
+   - Provides calculated dashboard statistics.
+   - The client uses the statistics endpoints for overview figures and charts such as rarity, type, set, and yearly card counts.
 
-## 5. Running locally
+## Instructions for Running the Product and Pushing Code to Git
 
-### Prerequisites
-- Python 3.9+
-- A modern browser
+### 1. Start the Flask Server
 
-### Steps
+Open PowerShell or Command Prompt and enter the project folder:
 
-```bash
-# 1. Clone and enter the project
-git clone <your-repo-url>
+```powershell
 cd pokemon-tcg-dashboard
+```
 
-# 2. Set up the server
+Install the required Python libraries:
+
+```powershell
+python -m pip install -r server\requirements.txt
+```
+
+Generate the processed data:
+
+```powershell
 cd server
-pip install -r requirements.txt
-
-# 3. Generate the cleaned dataset (only needed once, or after changing data_loader.py)
 python data_loader.py
+```
 
-# 4. Start the Flask API (runs on http://127.0.0.1:5000)
+Start the Flask server:
+
+```powershell
 python app.py
 ```
 
-Leave that terminal running, then in a **second terminal**:
+The Flask API will run at:
 
-```bash
-# 5. Serve the client
-cd pokemon-tcg-dashboard/client
+```text
+http://127.0.0.1:5000
+```
+
+Keep this terminal running.
+
+### 2. Run the HTML Web Client
+
+Open a second PowerShell or Command Prompt window:
+
+```powershell
+cd pokemon-tcg-dashboard\client
 python -m http.server 8000
 ```
 
-Open **http://127.0.0.1:8000** in your browser. The client talks to the API at `http://127.0.0.1:5000` (CORS is enabled server-side, so this cross-port setup works locally).
+Open the following address in a browser:
 
-> You can also just double-click `client/index.html` to open it directly (`file://`) — modern browsers still allow the `fetch()` calls to `127.0.0.1:5000` in this case, but serving it via `http.server` is recommended for consistent behaviour.
+```text
+http://127.0.0.1:8000
+```
 
-## 6. Features
+The HTML client communicates with the Flask server through the API at:
 
-- **Stat strip** — headline counts (total cards, sets, series, artists, year range, average HP).
-- **Three charts** (Chart.js): horizontal bar of card count by rarity, doughnut of card count by energy type, line chart of cards printed per year.
-- **Filterable, searchable card browser** — search by name, filter by card type, series, set, rarity, energy type, and release-year range, all chainable. Sort by name, release date, HP, set, or rarity, ascending or descending.
-- **Pagination** with page indicator and prev/next controls.
-- **Loading skeletons**, an empty-state message with a "clear filters" action, and an error state if the API is unreachable.
-- Fully responsive down to mobile widths.
+```text
+http://127.0.0.1:5000/api
+```
 
-## 7. Deployment
+### 3. Select and Use Filters
 
-For a public link, the simplest options are:
+Use the dashboard filter controls to:
+1. Search for a Pokémon by name.
+2. Select a card type.
+3. Select a series.
+4. Select a set.
+5. Select a rarity.
+6. Select a release-year range.
+7. Select sorting options such as name, release date, HP, set, or rarity.
+8. Combine multiple filters at the same time.
 
-- **Client:** deploy the `client/` folder as a static site on Vercel or Netlify.
-- **Server:** deploy `server/` to Render (or Railway/Fly.io) as a Python web service, or expose a local Flask instance quickly for testing with `ngrok http 5000`.
+The filters are chainable. The card catalogue and dashboard results update according to the selected filters.
 
-If deploying the client and server to different origins, update `API_BASE` at the top of `client/app.js` to point to the deployed server's URL.
+To return to the full catalogue, clear the selected filters.
 
-## 8. Tech stack
+### 4. Push the Project to Git
 
-- **Data:** pandas
-- **Server:** Flask, Flask-CORS
-- **Client:** HTML, CSS, vanilla JavaScript, Chart.js (via CDN)
+From the project root:
+
+```powershell
+cd pokemon-tcg-dashboard
+git init
+git add .
+git commit -m "Initial Pokémon TCG Card Explorer project"
+```
+
+Connect the local repository to a GitHub repository:
+
+```powershell
+git remote add origin https://github.com/YOUR_USERNAME/YOUR_REPOSITORY.git
+```
+
+Push the project:
+
+```powershell
+git branch -M main
+git push -u origin main
+```
+
+For later changes:
+
+```powershell
+git add .
+git commit -m "Describe the changes"
+git push
+```
+
+## Requirements: Installed Libraries and Versions
+
+The project uses the following libraries and version ranges specified in `server/requirements.txt`:
+
+| Library | Version |
+|---|---|
+| Flask | 3.0 or higher, below 4.0 |
+| Flask-CORS | 4.0 or higher, below 7.0 |
+| pandas | 2.0 or higher, below 3.0 |
+| Gunicorn | 21 or higher, below 24 |
+| Chart.js | Used in the web client through CDN |
+
+The Python project uses version ranges rather than exact pinned package versions, so the exact installed patch version may depend on when `pip install -r server/requirements.txt` is run.
+
+## Code: Languages Used
+
+- **Python** — data processing and Flask server/API
+- **HTML** — web client structure
+- **CSS** — web client styling and responsive layout
+- **JavaScript** — client-side API requests, filtering, interaction, and chart rendering
