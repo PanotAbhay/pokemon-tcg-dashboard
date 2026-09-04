@@ -24,57 +24,15 @@
       <span class="conn-label">Connecting…</span>
     </div>
   </div>
+  <nav class="tab-nav" aria-label="Page">
+    <button type="button" class="tab-nav-btn" id="nav-search" data-tab="search">Search</button>
+    <button type="button" class="tab-nav-btn active" id="nav-stats" data-tab="stats">Statistics</button>
+  </nav>
 </header>
 
 <main>
 
-  <section class="stat-strip" id="stat-strip" aria-label="Dataset overview">
-    <div class="stat-card">
-      <span class="stat-label">Cards</span>
-      <span class="stat-value" id="stat-total-cards">—</span>
-    </div>
-    <div class="stat-card">
-      <span class="stat-label">Sets</span>
-      <span class="stat-value" id="stat-total-sets">—</span>
-    </div>
-    <div class="stat-card">
-      <span class="stat-label">Series</span>
-      <span class="stat-value" id="stat-total-series">—</span>
-    </div>
-    <div class="stat-card">
-      <span class="stat-label">Artists</span>
-      <span class="stat-value" id="stat-total-artists">—</span>
-    </div>
-    <div class="stat-card">
-      <span class="stat-label">Years covered</span>
-      <span class="stat-value" id="stat-years">—</span>
-    </div>
-    <div class="stat-card">
-      <span class="stat-label">Avg HP</span>
-      <span class="stat-value" id="stat-avg-hp">—</span>
-    </div>
-  </section>
-
-  <section class="showcase" aria-label="Catalog analytics">
-    <h2 class="section-title">Showcase pages</h2>
-    <div class="showcase-grid">
-      <div class="showcase-page">
-        <div class="page-tab">01 — Rarity</div>
-        <h3>Cards by rarity</h3>
-        <div class="chart-wrap"><canvas id="chart-rarity"></canvas></div>
-      </div>
-      <div class="showcase-page">
-        <div class="page-tab">02 — Type</div>
-        <h3>Cards by energy type</h3>
-        <div class="chart-wrap"><canvas id="chart-type"></canvas></div>
-      </div>
-      <div class="showcase-page wide">
-        <div class="page-tab">03 — Timeline</div>
-        <h3>Cards printed per year</h3>
-        <div class="chart-wrap"><canvas id="chart-year"></canvas></div>
-      </div>
-    </div>
-  </section>
+<section id="tab-search" class="app-tab hidden">
 
   <section class="binder" id="binder-section" aria-label="Card catalog">
     <div class="binder-header">
@@ -177,6 +135,65 @@
 
     </div>
   </section>
+
+</section>
+
+<section id="tab-stats" class="app-tab">
+
+  <section class="stat-strip" id="stat-strip" aria-label="Dataset overview">
+    <div class="stat-card">
+      <span class="stat-label">Cards</span>
+      <span class="stat-value" id="stat-total-cards">—</span>
+    </div>
+    <div class="stat-card">
+      <span class="stat-label">Sets</span>
+      <span class="stat-value" id="stat-total-sets">—</span>
+    </div>
+    <div class="stat-card">
+      <span class="stat-label">Series</span>
+      <span class="stat-value" id="stat-total-series">—</span>
+    </div>
+    <div class="stat-card">
+      <span class="stat-label">Artists</span>
+      <span class="stat-value" id="stat-total-artists">—</span>
+    </div>
+    <div class="stat-card">
+      <span class="stat-label">Years covered</span>
+      <span class="stat-value" id="stat-years">—</span>
+    </div>
+    <div class="stat-card">
+      <span class="stat-label">Avg HP</span>
+      <span class="stat-value" id="stat-avg-hp">—</span>
+    </div>
+  </section>
+
+  <section class="showcase" aria-label="Catalog analytics">
+    <h2 class="section-title">Showcase pages</h2>
+    <div class="showcase-grid">
+      <div class="showcase-page">
+        <div class="page-tab">01 — Rarity</div>
+        <h3>Top 10 most card rarities</h3>
+        <div class="chart-wrap"><canvas id="chart-rarity"></canvas></div>
+      </div>
+      <div class="showcase-page">
+        <div class="page-tab">02 — Type</div>
+        <h3>Cards by energy type</h3>
+        <div class="chart-wrap"><canvas id="chart-type"></canvas></div>
+      </div>
+      <div class="showcase-page wide">
+        <div class="page-tab">03 — Timeline</div>
+        <h3>Cards printed per year</h3>
+        <div class="chart-wrap"><canvas id="chart-year"></canvas></div>
+      </div>
+      <div class="showcase-page">
+        <div class="page-tab">04 — Artists</div>
+        <h3>Top artists by card count</h3>
+        <div class="chart-wrap"><canvas id="chart-artist"></canvas></div>
+      </div>
+    </div>
+  </section>
+
+</section>
 
 </main>
 

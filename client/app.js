@@ -55,26 +55,82 @@ const numberFmt = new Intl.NumberFormat('en-GB');
 
 const CHART_COLORS = {
   red: '#E63946',
-  teal: '#2A9D8F',
+  teal: '#457B9D',
+  frosted: '#A8DADC',
   gold: '#FFB703',
-  cream: '#F5F1E8',
-  dim: 'rgba(245, 241, 232, 0.5)',
-  grid: 'rgba(245, 241, 232, 0.08)',
+  cream: '#F1FAEE',
+  dim: 'rgba(241, 250, 238, 0.5)',
+  grid: 'rgba(241, 250, 238, 0.08)',
 };
 
 const TYPE_COLOR_MAP = {
-  Fire: '#E63946',
-  Water: '#2A9D8F',
-  Grass: '#6BBF59',
-  Lightning: '#FFB703',
-  Psychic: '#B388EB',
-  Fighting: '#C97A4A',
-  Darkness: '#5C5470',
-  Metal: '#9AA5B1',
-  Dragon: '#F4845F',
-  Fairy: '#F2A6D8',
-  Colorless: '#D9D2C1',
+  Fire: '#E6194B',
+  Water: '#4363D8',
+  Grass: '#3CB44B',
+  Lightning: '#FFE119',
+  Fighting: '#F58231',
+  Psychic: '#911EB4',
+  Darkness: '#0B1B33',
+  Metal: '#AAAAAA',
+  Dragon: '#00E5FF',
+  Fairy: '#FF2D95',
+  Colorless: '#F1FAEE',
 };
+
+// ---------- Rarity chart helpers ----------
+
+// Rarities like "Rare Rainbow" / "Rare Secret" read backwards — move a
+// leading/embedded "Rare" to the end so they read "Rainbow Rare", "Secret Rare", etc.
+function reorderRarityLabel(rarity) {
+  const words = rarity.split(' ');
+  if (words.length > 1 && words.includes('Rare') && words[words.length - 1] !== 'Rare') {
+    return [...words.filter((w) => w !== 'Rare'), 'Rare'].join(' ');
+  }
+  return rarity;
+}
+
+// Evenly-spaced hues (golden angle) so adjacent bars are never visually similar.
+function distinctColor(index, alpha = 1) {
+  const hue = (index * 137.508) % 360;
+  return alpha === 1 ? `hsl(${hue}, 72%, 58%)` : `hsla(${hue}, 72%, 58%, ${alpha})`;
+}
+
+// Pixel span of one horizontal bar's actual rendered length (not the whole chart
+// width) — needed so a gradient painted on a short bar isn't just its leftmost sliver.
+function barPixelRange(chart, dataIndex) {
+  const scale = chart.scales.x;
+  const value = chart.data.datasets[0].data[dataIndex];
+  return [scale.getPixelForValue(0), scale.getPixelForValue(value)];
+}
+
+function makeRainbowGradient(chart, dataIndex) {
+  const { ctx, chartArea } = chart;
+  if (!chartArea) return CHART_COLORS.red;
+  const [x0, x1] = barPixelRange(chart, dataIndex);
+  const gradient = ctx.createLinearGradient(x0, 0, x1, 0);
+  ['#FF0000', '#FF9900', '#FFEE00', '#33CC33', '#3388FF', '#6633CC', '#CC33CC'].forEach((color, i, arr) => {
+    gradient.addColorStop(i / (arr.length - 1), color);
+  });
+  return gradient;
+}
+
+function makeChromeGradient(chart, dataIndex) {
+  const { ctx, chartArea } = chart;
+  if (!chartArea) return CHART_COLORS.frosted;
+  const [x0, x1] = barPixelRange(chart, dataIndex);
+  const gradient = ctx.createLinearGradient(x0, 0, x1, 0);
+  ['#5B6470', '#E8ECF0', '#FFFFFF', '#AEB6BF', '#8A94A0', '#F4F6F8'].forEach((color, i, arr) => {
+    gradient.addColorStop(i / (arr.length - 1), color);
+  });
+  return gradient;
+}
+
+function rarityBarColor(context, rawRarities) {
+  const raw = rawRarities[context.dataIndex];
+  if (raw === 'Rare Rainbow') return makeRainbowGradient(context.chart, context.dataIndex);
+  if (raw === 'Rare Secret') return makeChromeGradient(context.chart, context.dataIndex);
+  return distinctColor(context.dataIndex);
+}
 
 Chart.defaults.color = CHART_COLORS.dim;
 Chart.defaults.font.family = "'Inter', sans-serif";
@@ -97,16 +153,17 @@ async function loadOverview() {
 async function loadRarityChart() {
   const data = await fetchJSON(`${API_BASE}/stats/by-rarity`);
   const top = data.slice(0, 10);
+  const rawRarities = top.map((d) => d.rarity);
   const ctx = document.getElementById('chart-rarity');
   charts.rarity = new Chart(ctx, {
     type: 'bar',
     data: {
-      labels: top.map((d) => d.rarity),
+      labels: top.map((d) => reorderRarityLabel(d.rarity)),
       datasets: [
         {
           label: 'Card count',
           data: top.map((d) => d.card_count),
-          backgroundColor: CHART_COLORS.red,
+          backgroundColor: (context) => rarityBarColor(context, rawRarities),
           borderRadius: 3,
         },
       ],
@@ -125,7 +182,7 @@ async function loadRarityChart() {
       },
       scales: {
         x: { grid: { color: CHART_COLORS.grid }, ticks: { callback: (v) => numberFmt.format(v) } },
-        y: { grid: { display: false } },
+        y: { grid: { display: false }, ticks: { autoSkip: false } },
       },
     },
   });
@@ -135,15 +192,15 @@ async function loadTypeChart() {
   const data = await fetchJSON(`${API_BASE}/stats/by-type`);
   const ctx = document.getElementById('chart-type');
   charts.type = new Chart(ctx, {
-    type: 'doughnut',
+    type: 'bar',
     data: {
       labels: data.map((d) => d.primary_type),
       datasets: [
         {
+          label: 'Card count',
           data: data.map((d) => d.card_count),
           backgroundColor: data.map((d) => TYPE_COLOR_MAP[d.primary_type] || CHART_COLORS.dim),
-          borderColor: '#22223B',
-          borderWidth: 2,
+          borderRadius: 3,
         },
       ],
     },
@@ -151,15 +208,16 @@ async function loadTypeChart() {
       responsive: true,
       maintainAspectRatio: false,
       plugins: {
-        legend: {
-          position: 'right',
-          labels: { boxWidth: 10, padding: 10, font: { size: 11 } },
-        },
+        legend: { display: false },
         tooltip: {
           callbacks: {
-            label: (ctx) => `${ctx.label}: ${numberFmt.format(ctx.parsed)} cards`,
+            label: (ctx) => `${numberFmt.format(ctx.parsed.y)} cards`,
           },
         },
+      },
+      scales: {
+        x: { grid: { display: false } },
+        y: { grid: { color: CHART_COLORS.grid }, ticks: { callback: (v) => numberFmt.format(v) } },
       },
     },
   });
@@ -199,6 +257,46 @@ async function loadYearChart() {
       scales: {
         x: { grid: { display: false } },
         y: { grid: { color: CHART_COLORS.grid }, ticks: { callback: (v) => numberFmt.format(v) } },
+      },
+    },
+  });
+}
+
+async function loadArtistChart() {
+  const data = await fetchJSON(`${API_BASE}/stats/by-artist`);
+  const ctx = document.getElementById('chart-artist');
+  charts.artist = new Chart(ctx, {
+    type: 'polarArea',
+    data: {
+      labels: data.map((d) => d.artist),
+      datasets: [
+        {
+          data: data.map((d) => d.card_count),
+          backgroundColor: data.map((d, i) => distinctColor(i, 0.75)),
+          borderColor: CHART_COLORS.cream,
+          borderWidth: 1,
+        },
+      ],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: {
+          position: 'right',
+          labels: { boxWidth: 10, padding: 8, font: { size: 10.5 } },
+        },
+        tooltip: {
+          callbacks: {
+            label: (ctx) => `${ctx.label}: ${numberFmt.format(ctx.raw)} cards`,
+          },
+        },
+      },
+      scales: {
+        r: {
+          grid: { color: CHART_COLORS.grid },
+          ticks: { display: false },
+        },
       },
     },
   });
@@ -371,6 +469,27 @@ async function loadCards() {
   }
 }
 
+// ---------- Tabs ----------
+
+let statsLoaded = false;
+
+function switchTab(tab) {
+  document.getElementById('tab-search').classList.toggle('hidden', tab !== 'search');
+  document.getElementById('tab-stats').classList.toggle('hidden', tab !== 'stats');
+  document.getElementById('nav-search').classList.toggle('active', tab === 'search');
+  document.getElementById('nav-stats').classList.toggle('active', tab === 'stats');
+
+  if (tab === 'stats' && !statsLoaded) {
+    statsLoaded = true;
+    Promise.allSettled([loadOverview(), loadRarityChart(), loadTypeChart(), loadYearChart(), loadArtistChart()]);
+  }
+}
+
+function wireTabs() {
+  document.getElementById('nav-search').addEventListener('click', () => switchTab('search'));
+  document.getElementById('nav-stats').addEventListener('click', () => switchTab('stats'));
+}
+
 // ---------- Event wiring ----------
 
 function onFilterChange() {
@@ -428,6 +547,7 @@ function wireEvents() {
 // ---------- Init ----------
 
 async function init() {
+  wireTabs();
   wireEvents();
   try {
     await fetchJSON(`${API_BASE}/health`);
@@ -436,14 +556,9 @@ async function init() {
     setConnStatus('error', 'Disconnected');
   }
 
-  await Promise.allSettled([
-    loadOverview(),
-    loadRarityChart(),
-    loadTypeChart(),
-    loadYearChart(),
-    loadFilterOptions(),
-  ]);
+  switchTab('stats');
 
+  await loadFilterOptions();
   loadCards();
 }
 

@@ -1,16 +1,17 @@
 :root {
-  --ink: #1A1A2E;
-  --ink-raised: #22223B;
-  --cream: #F5F1E8;
-  --cream-dim: #E7E1D3;
+  --ink: #1D3557;
+  --ink-raised: #244169;
+  --cream: #F1FAEE;
+  --cream-dim: #DCEAD6;
   --red: #E63946;
-  --red-dim: #C43A45;
-  --teal: #2A9D8F;
+  --red-dim: #C23140;
+  --teal: #457B9D;
+  --frosted: #A8DADC;
   --gold: #FFB703;
-  --line: rgba(245, 241, 232, 0.14);
-  --line-strong: rgba(245, 241, 232, 0.28);
-  --text-dim: rgba(245, 241, 232, 0.62);
-  --text-dimmer: rgba(245, 241, 232, 0.4);
+  --line: rgba(241, 250, 238, 0.14);
+  --line-strong: rgba(241, 250, 238, 0.28);
+  --text-dim: rgba(241, 250, 238, 0.62);
+  --text-dimmer: rgba(241, 250, 238, 0.4);
   --radius: 6px;
   --font-display: 'Oswald', sans-serif;
   --font-mono: 'IBM Plex Mono', monospace;
@@ -93,6 +94,39 @@ body {
 
 .conn-status.ok .dot { background: var(--teal); }
 .conn-status.error .dot { background: var(--red); }
+
+/* ---------- Tab nav ---------- */
+
+.tab-nav {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 0 24px;
+  display: flex;
+  justify-content: center;
+  gap: 4px;
+}
+
+.tab-nav-btn {
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--text-dim);
+  font-family: var(--font-display);
+  font-weight: 500;
+  font-size: 13.5px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 10px 14px;
+  cursor: pointer;
+  transition: color 0.12s ease, border-color 0.12s ease;
+}
+
+.tab-nav-btn:hover { color: var(--cream); }
+
+.tab-nav-btn.active {
+  color: var(--cream);
+  border-bottom-color: var(--red);
+}
 
 /* ---------- Layout ---------- */
 
@@ -189,6 +223,7 @@ main {
 }
 
 .chart-wrap { position: relative; height: 240px; }
+.chart-wrap-tall { height: 620px; }
 
 /* ---------- Binder ---------- */
 

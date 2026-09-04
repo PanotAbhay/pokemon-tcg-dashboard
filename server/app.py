@@ -10,6 +10,7 @@ Endpoints:
     GET /api/stats/by-rarity  Card count + avg HP by rarity
     GET /api/stats/by-type    Card count by primary type
     GET /api/stats/by-set     Card count + avg HP by set (top N)
+    GET /api/stats/by-artist  Card count by artist (top N)
     GET /api/stats/by-year    Card count by release year
     GET /api/stats/overview   Headline numbers for the dashboard
 """
@@ -215,6 +216,21 @@ def stats_by_set():
     grouped["release_date"] = grouped["release_date"].dt.strftime("%Y-%m-%d")
     if limit:
         grouped = grouped.tail(limit)  # most recent N sets by default
+    return jsonify(clean_records(grouped.to_dict(orient="records")))
+
+
+@app.route("/api/stats/by-artist")
+def stats_by_artist():
+    limit = request.args.get("limit", default=12, type=int)
+    grouped = (
+        df[df["artist"] != "Unknown"]
+        .groupby("artist")
+        .agg(card_count=("id", "count"))
+        .reset_index()
+        .sort_values("card_count", ascending=False)
+    )
+    if limit:
+        grouped = grouped.head(limit)
     return jsonify(clean_records(grouped.to_dict(orient="records")))
 
 

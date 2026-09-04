@@ -102,6 +102,8 @@ def load_and_clean(raw_path: str = RAW_PATH) -> pd.DataFrame:
         df[col] = df[col].replace({"nan": None, "None": None})
 
     df["rarity"] = df["rarity"].fillna("Unknown")
+    # "Rare Ultra" and "Ultra Rare" are the same tier under two different name orders.
+    df["rarity"] = df["rarity"].replace({"Rare Ultra": "Ultra Rare"})
     df["artist"] = df["artist"].fillna("Unknown")
 
     # --- 7. Deduplicate -------------------------------------------------------
