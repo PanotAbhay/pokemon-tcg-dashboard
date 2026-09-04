@@ -5,11 +5,11 @@ const API_BASE = window.location.origin.startsWith('http')
 const state = {
   filters: {
     q: '',
-    supertype: '',
-    series: '',
-    set: '',
-    rarity: '',
-    type: '',
+    supertype: [],
+    series: [],
+    set: [],
+    rarity: [],
+    type: [],
     year_from: '',
     year_to: '',
   },
@@ -28,7 +28,11 @@ const charts = {};
 function qs(params) {
   const usp = new URLSearchParams();
   Object.entries(params).forEach(([k, v]) => {
-    if (v !== '' && v !== null && v !== undefined) usp.set(k, v);
+    if (Array.isArray(v)) {
+      v.forEach((item) => usp.append(k, item));
+    } else if (v !== '' && v !== null && v !== undefined) {
+      usp.set(k, v);
+    }
   });
   return usp.toString();
 }
@@ -50,6 +54,91 @@ function setConnStatus(status, label) {
 }
 
 const numberFmt = new Intl.NumberFormat('en-GB');
+
+// ---------- Multi-select dropdown ----------
+
+function createMultiSelect(rootId) {
+  const root = document.getElementById(rootId);
+  const trigger = root.querySelector('.ms-trigger');
+  const panel = root.querySelector('.ms-panel');
+  let options = []; // [{ value, label }]
+  let selected = new Set();
+  let onChangeCb = () => {};
+
+  function render() {
+    panel.innerHTML = '';
+    if (options.length === 0) {
+      const empty = document.createElement('div');
+      empty.className = 'ms-empty';
+      empty.textContent = 'No options';
+      panel.appendChild(empty);
+      return;
+    }
+    options.forEach(({ value, label }) => {
+      const row = document.createElement('label');
+      row.className = 'ms-option';
+      const cb = document.createElement('input');
+      cb.type = 'checkbox';
+      cb.value = value;
+      cb.checked = selected.has(value);
+      cb.addEventListener('change', () => {
+        if (cb.checked) selected.add(value);
+        else selected.delete(value);
+        updateTrigger();
+        onChangeCb();
+      });
+      const span = document.createElement('span');
+      span.textContent = label;
+      row.appendChild(cb);
+      row.appendChild(span);
+      panel.appendChild(row);
+    });
+  }
+
+  function updateTrigger() {
+    const n = selected.size;
+    if (n === 0) {
+      trigger.textContent = 'All';
+    } else if (n === 1) {
+      const only = options.find((o) => selected.has(o.value));
+      trigger.textContent = only ? only.label : '1 selected';
+    } else {
+      trigger.textContent = `${n} selected`;
+    }
+    trigger.classList.toggle('active', n > 0);
+  }
+
+  trigger.addEventListener('click', (e) => {
+    e.stopPropagation();
+    document.querySelectorAll('.ms-panel').forEach((p) => {
+      if (p !== panel) p.classList.add('hidden');
+    });
+    panel.classList.toggle('hidden');
+  });
+
+  document.addEventListener('click', (e) => {
+    if (!root.contains(e.target)) panel.classList.add('hidden');
+  });
+
+  return {
+    setOptions(newOptions) {
+      const validValues = new Set(newOptions.map((o) => o.value));
+      selected = new Set([...selected].filter((v) => validValues.has(v)));
+      options = newOptions;
+      render();
+      updateTrigger();
+    },
+    getSelected: () => [...selected],
+    clear() {
+      selected = new Set();
+      render();
+      updateTrigger();
+    },
+    onChange(cb) {
+      onChangeCb = cb;
+    },
+  };
+}
 
 // ---------- Chart color palette (matches CSS design tokens) ----------
 
@@ -304,45 +393,70 @@ async function loadArtistChart() {
 
 // ---------- Filters ----------
 
+const multiSelects = {};
+let allSets = [];
+let seriesSetsMap = {};
+
+function toOptions(values) {
+  return values.map((v) => ({ value: v, label: v }));
+}
+
+// Options available in the Set filter, given whichever series are currently selected.
+function setOptionsForSelectedSeries() {
+  const selectedSeries = multiSelects.series.getSelected();
+  if (selectedSeries.length === 0) return toOptions(allSets);
+  const union = new Set();
+  selectedSeries.forEach((s) => (seriesSetsMap[s] || []).forEach((set) => union.add(set)));
+  return toOptions([...union].sort());
+}
+
 async function loadFilterOptions() {
   const data = await fetchJSON(`${API_BASE}/filters`);
-  populateSelect('f-series', data.series);
-  populateSelect('f-set', data.sets);
-  populateSelect('f-rarity', data.rarities);
-  populateSelect('f-type', data.types);
-  populateSelect('f-supertype', data.supertypes);
+  allSets = data.sets;
+  seriesSetsMap = data.series_sets;
+
+  multiSelects.supertype = createMultiSelect('ms-supertype');
+  multiSelects.series = createMultiSelect('ms-series');
+  multiSelects.set = createMultiSelect('ms-set');
+  multiSelects.rarity = createMultiSelect('ms-rarity');
+  multiSelects.type = createMultiSelect('ms-type');
+
+  multiSelects.supertype.setOptions(toOptions(data.supertypes));
+  multiSelects.series.setOptions(toOptions(data.series));
+  multiSelects.set.setOptions(toOptions(allSets));
+  multiSelects.rarity.setOptions(data.rarities.map((r) => ({ value: r, label: reorderRarityLabel(r) })));
+  multiSelects.type.setOptions(toOptions(data.types));
+
+  // Selecting a series narrows the Set dropdown to only sets within that series.
+  multiSelects.series.onChange(() => {
+    multiSelects.set.setOptions(setOptionsForSelectedSeries());
+    onFilterChange();
+  });
+
+  Object.entries(multiSelects).forEach(([key, ms]) => {
+    if (key === 'series') return; // already wired above with the extra set-narrowing step
+    ms.onChange(onFilterChange);
+  });
+
   document.getElementById('f-year-from').placeholder = `From (${data.year_min})`;
   document.getElementById('f-year-to').placeholder = `To (${data.year_max})`;
 }
 
-function populateSelect(id, values) {
-  const select = document.getElementById(id);
-  values.forEach((v) => {
-    const opt = document.createElement('option');
-    opt.value = v;
-    opt.textContent = v;
-    select.appendChild(opt);
-  });
-}
-
 function readFiltersFromForm() {
   state.filters.q = document.getElementById('f-search').value.trim();
-  state.filters.supertype = document.getElementById('f-supertype').value;
-  state.filters.series = document.getElementById('f-series').value;
-  state.filters.set = document.getElementById('f-set').value;
-  state.filters.rarity = document.getElementById('f-rarity').value;
-  state.filters.type = document.getElementById('f-type').value;
+  state.filters.supertype = multiSelects.supertype.getSelected();
+  state.filters.series = multiSelects.series.getSelected();
+  state.filters.set = multiSelects.set.getSelected();
+  state.filters.rarity = multiSelects.rarity.getSelected();
+  state.filters.type = multiSelects.type.getSelected();
   state.filters.year_from = document.getElementById('f-year-from').value;
   state.filters.year_to = document.getElementById('f-year-to').value;
 }
 
 function clearFilters() {
   document.getElementById('f-search').value = '';
-  document.getElementById('f-supertype').value = '';
-  document.getElementById('f-series').value = '';
-  document.getElementById('f-set').value = '';
-  document.getElementById('f-rarity').value = '';
-  document.getElementById('f-type').value = '';
+  Object.values(multiSelects).forEach((ms) => ms.clear());
+  multiSelects.set.setOptions(toOptions(allSets));
   document.getElementById('f-year-from').value = '';
   document.getElementById('f-year-to').value = '';
   state.page = 1;
@@ -505,11 +619,6 @@ function debouncedFilterChange() {
 
 function wireEvents() {
   document.getElementById('f-search').addEventListener('input', debouncedFilterChange);
-  document.getElementById('f-supertype').addEventListener('change', onFilterChange);
-  document.getElementById('f-series').addEventListener('change', onFilterChange);
-  document.getElementById('f-set').addEventListener('change', onFilterChange);
-  document.getElementById('f-rarity').addEventListener('change', onFilterChange);
-  document.getElementById('f-type').addEventListener('change', onFilterChange);
   document.getElementById('f-year-from').addEventListener('input', debouncedFilterChange);
   document.getElementById('f-year-to').addEventListener('input', debouncedFilterChange);
 

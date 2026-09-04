@@ -33,12 +33,12 @@ Flask serves the client's static files directly (`GET /` → `client/index.html`
 | Group | Endpoints | Function |
 |---|---|---|
 | Cards | `GET /api/cards`, `GET /api/cards/<id>` | Paginated, filtered, sorted card list (see query params below) and single-card lookup |
-| Filters | `GET /api/filters` | Distinct values per filterable field, for populating dropdowns |
+| Filters | `GET /api/filters` | Distinct values per filterable field (plus a `series_sets` map of series → its sets), for populating dropdowns |
 | Stats | `GET /api/stats/overview`, `by-rarity`, `by-type`, `by-set`, `by-year`, `by-artist` | Aggregated counts/averages powering the stat strip and charts |
 
 Plus `GET /api/health` for a liveness check.
 
-**`/api/cards` query params:** `q` (name substring), `set`, `series`, `rarity`, `type`, `supertype`, `generation` (exact match), `year_from`/`year_to`, `hp_min`/`hp_max`, `sort_by`, `order` (`asc`/`desc`), `page`, `page_size` (max 200). Errors return `{"error": "..."}` with `400`/`404`.
+**`/api/cards` query params:** `q` (name substring), `set`, `series`, `rarity`, `type`, `supertype`, `generation` (exact match; repeat the param for multiple values, e.g. `type=Fire&type=Water`), `year_from`/`year_to`, `hp_min`/`hp_max`, `sort_by`, `order` (`asc`/`desc`), `page`, `page_size` (max 200). Errors return `{"error": "..."}` with `400`/`404`.
 
 **Languages/frameworks:**
 - Data pipeline & server: **Python** (pandas, Flask, Flask-CORS)
@@ -55,7 +55,7 @@ python app.py            # starts Flask on http://127.0.0.1:5000
 
 Open **http://127.0.0.1:5000** in a browser — Flask serves the client and API together, so no second server is needed. The page opens on the **Statistics** tab by default; click **Search** to switch to the card catalog.
 
-**Filters:** on the Search tab, use the search box and dropdowns (set, series, rarity, type, supertype, year range); they combine and re-query `/api/cards` automatically. Clear all with the "clear filters" action shown in the empty state.
+**Filters:** on the Search tab, use the search box, the multi-select dropdowns (card type, series, set, rarity, energy type — each lets you check multiple values), and the year range; they combine and re-query `/api/cards` automatically. Selecting one or more series narrows the Set dropdown to only the sets belonging to those series (e.g. selecting "Black & White" narrows Set to sets like "Legendary Treasures"). Clear all with the "clear filters" action shown in the empty state.
 
 **Exposing it publicly with ngrok:** with `python app.py` still running locally on port 5000, in a separate terminal run:
 ```bash

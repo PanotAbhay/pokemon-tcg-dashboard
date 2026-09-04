@@ -54,6 +54,12 @@ def health():
 @app.route("/api/filters")
 def filters():
     """Distinct values for building filter dropdowns on the client."""
+    series_sets = (
+        df.dropna(subset=["series", "set"])
+        .groupby("series")["set"]
+        .apply(lambda s: sorted(s.unique().tolist()))
+        .to_dict()
+    )
     return jsonify(
         {
             "sets": sorted(df["set"].dropna().unique().tolist()),
@@ -62,6 +68,7 @@ def filters():
             "rarities": sorted(df["rarity"].dropna().unique().tolist()),
             "types": sorted(df["primary_type"].dropna().unique().tolist()),
             "supertypes": sorted(df["supertype"].dropna().unique().tolist()),
+            "series_sets": series_sets,
             "year_min": int(df["release_year"].min()),
             "year_max": int(df["release_year"].max()),
         }
@@ -75,11 +82,11 @@ def cards():
 
     Query params:
         q          substring search on card name (case-insensitive)
-        set        exact match on set name
-        series     exact match on series name
-        rarity     exact match on rarity
-        type       exact match on primary_type
-        supertype  exact match on supertype (Pokémon/Trainer/Energy)
+        set        exact match on set name (repeatable for multiple sets)
+        series     exact match on series name (repeatable)
+        rarity     exact match on rarity (repeatable)
+        type       exact match on primary_type (repeatable)
+        supertype  exact match on supertype (Pokémon/Trainer/Energy) (repeatable)
         year_from  release_year >=
         year_to    release_year <=
         hp_min     hp >=
@@ -103,9 +110,9 @@ def cards():
         ("supertype", "supertype"),
         ("generation", "generation"),
     ]:
-        val = request.args.get(param)
-        if val:
-            result = result[result[field] == val]
+        values = request.args.getlist(param)
+        if values:
+            result = result[result[field].isin(values)]
 
     year_from = request.args.get("year_from", type=int)
     if year_from is not None:
