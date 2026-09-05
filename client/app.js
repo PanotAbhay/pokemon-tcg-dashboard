@@ -55,6 +55,36 @@ function setConnStatus(status, label) {
 
 const numberFmt = new Intl.NumberFormat('en-GB');
 
+// ---------- Theme ----------
+
+const THEME_KEY = 'tcg-theme';
+
+function applyTheme(theme) {
+  document.documentElement.setAttribute('data-theme', theme);
+  try {
+    localStorage.setItem(THEME_KEY, theme);
+  } catch (err) {
+    /* storage unavailable (private mode, etc.) — theme just won't persist */
+  }
+}
+
+function initTheme() {
+  let saved = null;
+  try {
+    saved = localStorage.getItem(THEME_KEY);
+  } catch (err) {
+    /* ignore */
+  }
+  const prefersLight = window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches;
+  applyTheme(saved || (prefersLight ? 'light' : 'dark'));
+
+  document.getElementById('theme-toggle').addEventListener('click', () => {
+    const current = document.documentElement.getAttribute('data-theme');
+    applyTheme(current === 'light' ? 'dark' : 'light');
+    refreshChartsTheme();
+  });
+}
+
 // ---------- Multi-select dropdown ----------
 
 function createMultiSelect(rootId) {
@@ -142,15 +172,38 @@ function createMultiSelect(rootId) {
 
 // ---------- Chart color palette (matches CSS design tokens) ----------
 
+// dim/grid track the current theme (dark vs. light) via CSS custom properties;
+// everything else is a fixed brand hex, same in both themes.
+function cssVar(name) {
+  return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+}
+
 const CHART_COLORS = {
   red: '#E63946',
   teal: '#457B9D',
   frosted: '#A8DADC',
   gold: '#FFB703',
   cream: '#F1FAEE',
-  dim: 'rgba(241, 250, 238, 0.5)',
-  grid: 'rgba(241, 250, 238, 0.08)',
+  get dim() { return cssVar('--chart-dim'); },
+  get grid() { return cssVar('--chart-grid'); },
 };
+
+// Re-applies theme-dependent chart colors (axis ticks/grid) to every live
+// chart after a light/dark toggle — series colors are fixed hex and untouched.
+function refreshChartsTheme() {
+  Chart.defaults.color = CHART_COLORS.dim;
+  Object.values(charts).forEach((chart) => {
+    Object.values(chart.options.scales || {}).forEach((scale) => {
+      if (scale.grid && 'color' in scale.grid) scale.grid.color = CHART_COLORS.grid;
+      scale.ticks = { ...scale.ticks, color: CHART_COLORS.dim };
+    });
+    const legend = chart.options.plugins && chart.options.plugins.legend;
+    if (legend && legend.display !== false) {
+      legend.labels = { ...legend.labels, color: CHART_COLORS.dim };
+    }
+    chart.update('none');
+  });
+}
 
 // Validated categorical palette (dataviz skill reference palette, dark steps),
 // re-checked against this app's --ink surface (#1D3557) — CVD-safe adjacent
@@ -523,138 +576,139 @@ function clearFilters() {
   loadCards();
 }
 
-// ---------- Cards list ----------
+// ---------- Card image modal ----------
+
+function openCardModal(card) {
+  document.getElementById('card-modal-img').src = cardImageUrl(card);
+  document.getElementById('card-modal-img').alt = card.name;
+  document.getElementById('card-modal-name').textContent = card.name;
+  document.getElementById('card-modal-sub').textContent = [card.set, card.set_number].filter(Boolean).join(' · ');
+  document.getElementById('card-modal').classList.remove('hidden');
+}
+
+function closeCardModal() {
+  document.getElementById('card-modal').classList.add('hidden');
+}
+
+function wireCardModal() {
+  document.getElementById('card-modal-close').addEventListener('click', closeCardModal);
+  document.querySelector('.card-modal-backdrop').addEventListener('click', closeCardModal);
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') closeCardModal();
+  });
+}
+
+// ---------- Cards table ----------
+
+// Canonical rarity strings (server-side, see data_loader.py) mapped to a pill style.
+function rarityPillClass(rarity) {
+  if (rarity === 'Rainbow Rare') return 'pill rarity-rainbow';
+  if (rarity === 'Secret Rare') return 'pill rarity-secret';
+  if (rarity && (rarity.endsWith('Rare') || rarity.endsWith('Rare Holo')) && rarity !== 'Rare') return 'pill rarity-hi';
+  return 'pill';
+}
 
 function renderCardSkeletons(n = 12) {
-  const grid = document.getElementById('pocket-grid');
-  grid.innerHTML = '';
+  const body = document.getElementById('card-table-body');
+  body.innerHTML = '';
   for (let i = 0; i < n; i++) {
-    const div = document.createElement('div');
-    div.className = 'skeleton';
-    grid.appendChild(div);
+    const row = document.createElement('tr');
+    row.className = 'skeleton-row';
+    for (let c = 0; c < 8; c++) {
+      const td = document.createElement('td');
+      const bar = document.createElement('div');
+      bar.className = 'skeleton-bar';
+      td.appendChild(bar);
+      row.appendChild(td);
+    }
+    body.appendChild(row);
   }
 }
 
+function cardImageUrl(card) {
+  const dashIndex = card.id.lastIndexOf('-');
+  return `https://images.pokemontcg.io/${card.id.slice(0, dashIndex)}/${card.id.slice(dashIndex + 1)}.png`;
+}
+
 function renderCards(cards) {
-  const grid = document.getElementById('pocket-grid');
-  grid.innerHTML = '';
+  const body = document.getElementById('card-table-body');
+  body.innerHTML = '';
+
   cards.forEach((card) => {
-    const el = document.createElement('div');
-    el.className = 'card-pocket';
-    el.tabIndex = 0;
-    el.setAttribute('role', 'button');
-    el.setAttribute('aria-expanded', 'false');
+    const row = document.createElement('tr');
 
-    // Tier 1 (always visible): name, rarity, set.
-    const tier1 = document.createElement('div');
-    tier1.className = 'card-tier card-tier-1';
+    const nameCell = document.createElement('td');
+    const nameWrap = document.createElement('div');
+    nameWrap.className = 'cell-card';
 
-    const name = document.createElement('span');
-    name.className = 'card-name';
+    const thumb = document.createElement('img');
+    thumb.className = 'card-thumb';
+    thumb.loading = 'lazy';
+    thumb.alt = card.name;
+    thumb.src = cardImageUrl(card);
+    thumb.onerror = () => thumb.classList.add('is-missing');
+    thumb.addEventListener('click', () => openCardModal(card));
+    nameWrap.appendChild(thumb);
+
+    const nameText = document.createElement('div');
+    const name = document.createElement('div');
+    name.className = 'cell-name';
     name.textContent = card.name;
-    tier1.appendChild(name);
+    nameText.appendChild(name);
+    const sub = document.createElement('div');
+    sub.className = 'cell-sub';
+    sub.textContent = card.set_number || card.supertype;
+    nameText.appendChild(sub);
+    nameWrap.appendChild(nameText);
 
-    const rarityTag = document.createElement('span');
-    rarityTag.className = 'tag rarity';
-    rarityTag.textContent = card.rarity;
-    tier1.appendChild(rarityTag);
+    nameCell.appendChild(nameWrap);
+    row.appendChild(nameCell);
 
-    const setLine = document.createElement('div');
-    setLine.className = 'card-set';
-    setLine.textContent = card.set_number ? `${card.set} · ${card.set_number}` : card.set;
-    tier1.appendChild(setLine);
+    const setCell = document.createElement('td');
+    setCell.textContent = card.set;
+    row.appendChild(setCell);
 
-    el.appendChild(tier1);
+    const seriesCell = document.createElement('td');
+    seriesCell.textContent = card.series;
+    row.appendChild(seriesCell);
 
-    // Tier 2 (hover, or expanded): series + release date.
-    const tier2 = document.createElement('div');
-    tier2.className = 'card-tier card-tier-2';
-    tier2.textContent = `${card.series} · ${card.release_date}`;
-    el.appendChild(tier2);
+    const rarityCell = document.createElement('td');
+    const rarityPill = document.createElement('span');
+    rarityPill.className = rarityPillClass(card.rarity);
+    rarityPill.textContent = card.rarity;
+    rarityCell.appendChild(rarityPill);
+    row.appendChild(rarityCell);
 
-    // Tier 3 (click to expand): everything else.
-    const tier3 = document.createElement('div');
-    tier3.className = 'card-tier card-tier-3';
-
-    const img = document.createElement('img');
-    img.className = 'card-art';
-    img.loading = 'lazy';
-    img.alt = card.name;
-    const dashIndex = card.id.lastIndexOf('-');
-    img.src = `https://images.pokemontcg.io/${card.id.slice(0, dashIndex)}/${card.id.slice(dashIndex + 1)}.png`;
-    img.onerror = () => img.remove();
-    tier3.appendChild(img);
-
-    const tags = document.createElement('div');
-    tags.className = 'card-tags';
-
-    if (card.hp !== null && card.hp !== undefined) {
-      const hp = document.createElement('span');
-      hp.className = 'tag hp';
-      hp.textContent = `${Math.round(card.hp)} HP`;
-      tags.appendChild(hp);
-    }
-
+    const typeCell = document.createElement('td');
     if (card.primary_type) {
-      const typeTag = document.createElement('span');
-      typeTag.className = 'tag type';
-      typeTag.textContent = card.types_display || card.primary_type;
-      tags.appendChild(typeTag);
+      const typePill = document.createElement('span');
+      typePill.className = 'pill type-tag';
+      typePill.style.color = TYPE_COLOR_MAP[card.primary_type] || CHART_COLORS.dim;
+      typePill.textContent = card.types_display || card.primary_type;
+      typeCell.appendChild(typePill);
+    } else {
+      typeCell.textContent = '—';
     }
+    row.appendChild(typeCell);
 
-    const supertypeTag = document.createElement('span');
-    supertypeTag.className = 'tag';
-    supertypeTag.textContent = card.supertype;
-    tags.appendChild(supertypeTag);
+    const hpCell = document.createElement('td');
+    hpCell.textContent = card.hp !== null && card.hp !== undefined ? Math.round(card.hp) : '—';
+    row.appendChild(hpCell);
 
-    if (card.retreat_cost !== null && card.retreat_cost !== undefined) {
-      const retreatTag = document.createElement('span');
-      retreatTag.className = 'tag';
-      retreatTag.textContent = `Retreat: ${Math.round(card.retreat_cost)}`;
-      tags.appendChild(retreatTag);
-    }
+    const artistCell = document.createElement('td');
+    artistCell.textContent = card.artist || 'Unknown';
+    row.appendChild(artistCell);
 
-    tier3.appendChild(tags);
+    const dateCell = document.createElement('td');
+    dateCell.textContent = card.release_date;
+    row.appendChild(dateCell);
 
-    const details = document.createElement('div');
-    details.className = 'card-details';
-
-    const genLine = document.createElement('span');
-    genLine.textContent = `Generation: ${card.generation ?? '—'}`;
-    details.appendChild(genLine);
-
-    const artistLine = document.createElement('span');
-    artistLine.textContent = `Artist: ${card.artist ?? 'Unknown'}`;
-    details.appendChild(artistLine);
-
-    tier3.appendChild(details);
-
-    el.appendChild(tier3);
-
-    el.addEventListener('click', () => {
-      const willExpand = !el.classList.contains('expanded');
-      grid.querySelectorAll('.card-pocket.expanded').forEach((other) => {
-        if (other !== el) {
-          other.classList.remove('expanded');
-          other.setAttribute('aria-expanded', 'false');
-        }
-      });
-      el.classList.toggle('expanded', willExpand);
-      el.setAttribute('aria-expanded', String(willExpand));
-    });
-    el.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter' || e.key === ' ') {
-        e.preventDefault();
-        el.click();
-      }
-    });
-
-    grid.appendChild(el);
+    body.appendChild(row);
   });
 }
 
 async function loadCards() {
-  const grid = document.getElementById('pocket-grid');
+  const body = document.getElementById('card-table-body');
   const empty = document.getElementById('pocket-empty');
   const errorBox = document.getElementById('pocket-error');
   const pagination = document.getElementById('pagination');
@@ -679,7 +733,7 @@ async function loadCards() {
     document.getElementById('result-count').textContent = `${numberFmt.format(data.total)} card${data.total === 1 ? '' : 's'}`;
 
     if (data.results.length === 0) {
-      grid.innerHTML = '';
+      body.innerHTML = '';
       pagination.classList.add('hidden');
       empty.classList.remove('hidden');
       return;
@@ -691,7 +745,7 @@ async function loadCards() {
     document.getElementById('page-prev').disabled = data.page <= 1;
     document.getElementById('page-next').disabled = data.page >= data.total_pages;
   } catch (err) {
-    grid.innerHTML = '';
+    body.innerHTML = '';
     pagination.classList.add('hidden');
     errorBox.classList.remove('hidden');
     setConnStatus('error', 'Disconnected');
@@ -708,6 +762,9 @@ function switchTab(tab) {
   document.getElementById('tab-stats').classList.toggle('hidden', tab !== 'stats');
   document.getElementById('nav-search').classList.toggle('active', tab === 'search');
   document.getElementById('nav-stats').classList.toggle('active', tab === 'stats');
+
+  document.getElementById('topbar-title').textContent = tab === 'search' ? 'Catalog' : 'Overview';
+  document.getElementById('topbar-search-wrap').classList.toggle('hidden', tab !== 'search');
 
   if (tab === 'stats' && !statsLoaded) {
     statsLoaded = true;
@@ -775,8 +832,10 @@ function changePage(delta) {
 // ---------- Init ----------
 
 async function init() {
+  initTheme();
   wireTabs();
   wireEvents();
+  wireCardModal();
 
   // Connection-status dot only; don't block tab/filter/card loading on it.
   fetchJSON(`${API_BASE}/health`)

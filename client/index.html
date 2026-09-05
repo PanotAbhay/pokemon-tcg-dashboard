@@ -10,206 +10,262 @@
 </head>
 <body>
 
-<header class="site-header">
-  <div class="header-inner">
+<div class="shell">
+
+  <aside class="sidebar">
     <div class="brand">
       <span class="brand-mark">TCG</span>
       <div class="brand-text">
         <h1>Card Explorer</h1>
-        <p>Pokémon Trading Card Game catalog, 1999–2023</p>
+        <p>1999–2023</p>
       </div>
     </div>
-    <div id="conn-status" class="conn-status">
-      <span class="dot"></span>
-      <span class="conn-label">Connecting…</span>
+
+    <nav class="side-nav" aria-label="Sections">
+      <button type="button" class="side-nav-btn" id="nav-stats" data-view="stats">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20V10M12 20V4M20 20v-7"/></svg>
+        <span>Overview</span>
+      </button>
+      <button type="button" class="side-nav-btn" id="nav-search" data-view="search">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l9 5-9 5-9-5 9-5z"/><path d="M3 13l9 5 9-5"/></svg>
+        <span>Catalog</span>
+      </button>
+    </nav>
+
+    <div class="sidebar-footer">
+      <p>Data: Pokémon TCG API via Kaggle (adampq/pokemon-tcg-all-cards-1999-2023)</p>
+      <p>Built with Flask + pandas + Chart.js</p>
+    </div>
+  </aside>
+
+  <div class="main-col">
+
+    <header class="topbar">
+      <div class="topbar-title" id="topbar-title">Overview</div>
+
+      <div class="topbar-search hidden" id="topbar-search-wrap">
+        <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+        <input type="text" id="f-search" placeholder="Search card name…" autocomplete="off">
+      </div>
+
+      <div class="topbar-spacer"></div>
+
+      <div id="conn-status" class="conn-status">
+        <span class="dot"></span>
+        <span class="conn-label">Connecting…</span>
+      </div>
+
+      <button type="button" class="theme-toggle" id="theme-toggle" aria-label="Toggle color theme">
+        <span class="theme-toggle-icon sun">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+        </span>
+        <span class="theme-toggle-icon moon">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1111.2 3a7 7 0 009.8 9.8z"/></svg>
+        </span>
+      </button>
+    </header>
+
+    <main>
+
+      <section id="tab-stats" class="app-tab">
+
+        <section class="stat-strip" id="stat-strip" aria-label="Dataset overview">
+          <div class="stat-card">
+            <span class="stat-label">Cards</span>
+            <span class="stat-value" id="stat-total-cards">—</span>
+          </div>
+          <div class="stat-card">
+            <span class="stat-label">Sets</span>
+            <span class="stat-value" id="stat-total-sets">—</span>
+          </div>
+          <div class="stat-card">
+            <span class="stat-label">Series</span>
+            <span class="stat-value" id="stat-total-series">—</span>
+          </div>
+          <div class="stat-card">
+            <span class="stat-label">Artists</span>
+            <span class="stat-value" id="stat-total-artists">—</span>
+          </div>
+          <div class="stat-card">
+            <span class="stat-label">Years covered</span>
+            <span class="stat-value" id="stat-years">—</span>
+          </div>
+          <div class="stat-card">
+            <span class="stat-label">Avg HP</span>
+            <span class="stat-value" id="stat-avg-hp">—</span>
+          </div>
+        </section>
+
+        <section class="showcase" aria-label="Catalog analytics">
+          <h2 class="section-title">Analytics</h2>
+          <div class="showcase-grid">
+            <div class="showcase-page">
+              <h3>Top 10 most card rarities</h3>
+              <div class="chart-wrap"><canvas id="chart-rarity"></canvas></div>
+            </div>
+            <div class="showcase-page">
+              <h3>Cards by energy type</h3>
+              <div class="chart-wrap"><canvas id="chart-type"></canvas></div>
+            </div>
+            <div class="showcase-page wide">
+              <h3>Cards printed per year</h3>
+              <div class="chart-wrap"><canvas id="chart-year"></canvas></div>
+            </div>
+            <div class="showcase-page">
+              <h3>Share of the top artist's cards that are secret rares</h3>
+              <div class="chart-wrap chart-wrap-tall" id="chart-artist-wrap"><canvas id="chart-artist"></canvas></div>
+            </div>
+            <div class="showcase-page wide">
+              <h3>Rarity inflation over time</h3>
+              <div class="chart-wrap"><canvas id="chart-rarity-year"></canvas></div>
+            </div>
+          </div>
+        </section>
+
+      </section>
+
+      <section id="tab-search" class="app-tab hidden">
+
+        <section class="binder" id="binder-section" aria-label="Card catalog">
+          <div class="binder-header">
+            <h2 class="section-title">Catalog</h2>
+            <div class="result-count" id="result-count">Loading…</div>
+          </div>
+
+          <div class="binder-layout">
+
+            <aside class="tab-panel" aria-label="Filters">
+              <div class="tab-panel-inner">
+
+                <div class="filter-group">
+                  <div class="filter-group-head">
+                    <span class="tab-label">Filters</span>
+                    <button id="f-clear" class="clear-link" type="button">Clear</button>
+                  </div>
+                </div>
+
+                <div class="filter-group">
+                  <label class="tab-label">Card type</label>
+                  <div class="multiselect" id="ms-supertype">
+                    <button type="button" class="ms-trigger">All</button>
+                    <div class="ms-panel hidden"></div>
+                  </div>
+                </div>
+
+                <div class="filter-group">
+                  <label class="tab-label">Series</label>
+                  <div class="multiselect" id="ms-series">
+                    <button type="button" class="ms-trigger">All</button>
+                    <div class="ms-panel hidden"></div>
+                  </div>
+                </div>
+
+                <div class="filter-group">
+                  <label class="tab-label">Set</label>
+                  <div class="multiselect" id="ms-set">
+                    <button type="button" class="ms-trigger">All</button>
+                    <div class="ms-panel hidden"></div>
+                  </div>
+                </div>
+
+                <div class="filter-group">
+                  <label class="tab-label">Rarity</label>
+                  <div class="multiselect" id="ms-rarity">
+                    <button type="button" class="ms-trigger">All</button>
+                    <div class="ms-panel hidden"></div>
+                  </div>
+                </div>
+
+                <div class="filter-group">
+                  <label class="tab-label">Artist</label>
+                  <div class="multiselect" id="ms-artist">
+                    <button type="button" class="ms-trigger">All</button>
+                    <div class="ms-panel hidden"></div>
+                  </div>
+                </div>
+
+                <div class="filter-group">
+                  <label class="tab-label">Release year</label>
+                  <div class="range-row">
+                    <input type="number" id="f-year-from" placeholder="From" inputmode="numeric">
+                    <span class="range-dash">–</span>
+                    <input type="number" id="f-year-to" placeholder="To" inputmode="numeric">
+                  </div>
+                </div>
+              </div>
+            </aside>
+
+            <div class="pocket-area">
+              <div class="pocket-toolbar">
+                <div class="sort-row">
+                  <label for="f-sort" class="tab-label">Sort by</label>
+                  <select id="f-sort">
+                    <option value="name">Name</option>
+                    <option value="release_date" selected>Release date</option>
+                    <option value="hp">HP</option>
+                    <option value="set">Set</option>
+                    <option value="rarity">Rarity</option>
+                  </select>
+                  <button id="f-order" class="order-btn" type="button" data-order="desc" aria-label="Toggle sort order">↓ Desc</button>
+                </div>
+              </div>
+
+              <div class="table-wrap">
+                <table class="data-table" aria-live="polite">
+                  <thead>
+                    <tr>
+                      <th>Card</th>
+                      <th>Set</th>
+                      <th>Series</th>
+                      <th>Rarity</th>
+                      <th>Type</th>
+                      <th>HP</th>
+                      <th>Artist</th>
+                      <th>Release</th>
+                    </tr>
+                  </thead>
+                  <tbody id="card-table-body">
+                    <!-- rows injected here -->
+                  </tbody>
+                </table>
+              </div>
+
+              <div id="pocket-empty" class="pocket-empty hidden">
+                <p>No cards match these filters.</p>
+                <button id="empty-clear" class="clear-btn" type="button">Clear filters</button>
+              </div>
+
+              <div id="pocket-error" class="pocket-error hidden">
+                <p>Couldn't reach the API. Is the Flask server running on port 5000?</p>
+              </div>
+
+              <div class="pagination" id="pagination">
+                <button id="page-prev" type="button">← Prev</button>
+                <span id="page-info">Page 1</span>
+                <button id="page-next" type="button">Next →</button>
+              </div>
+            </div>
+
+          </div>
+        </section>
+
+      </section>
+
+    </main>
+  </div>
+</div>
+
+<div id="card-modal" class="card-modal hidden">
+  <div class="card-modal-backdrop"></div>
+  <div class="card-modal-content">
+    <button type="button" id="card-modal-close" class="card-modal-close" aria-label="Close">✕</button>
+    <img id="card-modal-img" alt="">
+    <div class="card-modal-caption">
+      <div id="card-modal-name" class="card-modal-name"></div>
+      <div id="card-modal-sub" class="card-modal-sub"></div>
     </div>
   </div>
-  <nav class="tab-nav" aria-label="Page">
-    <button type="button" class="tab-nav-btn" id="nav-search" data-tab="search">Search</button>
-    <button type="button" class="tab-nav-btn active" id="nav-stats" data-tab="stats">Statistics</button>
-  </nav>
-</header>
-
-<main>
-
-<section id="tab-search" class="app-tab hidden">
-
-  <section class="binder" id="binder-section" aria-label="Card catalog">
-    <div class="binder-header">
-      <h2 class="section-title">Binder</h2>
-      <div class="result-count" id="result-count">Loading…</div>
-    </div>
-
-    <div class="binder-layout">
-
-      <aside class="tab-panel" aria-label="Filters">
-        <div class="tab-panel-inner">
-
-          <div class="filter-group">
-            <label for="f-search" class="tab-label">Search</label>
-            <input type="text" id="f-search" placeholder="Card name…" autocomplete="off">
-          </div>
-
-          <div class="filter-group">
-            <label class="tab-label">Card type</label>
-            <div class="multiselect" id="ms-supertype">
-              <button type="button" class="ms-trigger">All</button>
-              <div class="ms-panel hidden"></div>
-            </div>
-          </div>
-
-          <div class="filter-group">
-            <label class="tab-label">Series</label>
-            <div class="multiselect" id="ms-series">
-              <button type="button" class="ms-trigger">All</button>
-              <div class="ms-panel hidden"></div>
-            </div>
-          </div>
-
-          <div class="filter-group">
-            <label class="tab-label">Set</label>
-            <div class="multiselect" id="ms-set">
-              <button type="button" class="ms-trigger">All</button>
-              <div class="ms-panel hidden"></div>
-            </div>
-          </div>
-
-          <div class="filter-group">
-            <label class="tab-label">Rarity</label>
-            <div class="multiselect" id="ms-rarity">
-              <button type="button" class="ms-trigger">All</button>
-              <div class="ms-panel hidden"></div>
-            </div>
-          </div>
-
-          <div class="filter-group">
-            <label class="tab-label">Artist</label>
-            <div class="multiselect" id="ms-artist">
-              <button type="button" class="ms-trigger">All</button>
-              <div class="ms-panel hidden"></div>
-            </div>
-          </div>
-
-          <div class="filter-group">
-            <label class="tab-label">Release year</label>
-            <div class="range-row">
-              <input type="number" id="f-year-from" placeholder="From" inputmode="numeric">
-              <span class="range-dash">–</span>
-              <input type="number" id="f-year-to" placeholder="To" inputmode="numeric">
-            </div>
-          </div>
-
-          <button id="f-clear" class="clear-btn" type="button">Clear filters</button>
-        </div>
-      </aside>
-
-      <div class="pocket-area">
-        <div class="pocket-toolbar">
-          <div class="sort-row">
-            <label for="f-sort" class="tab-label">Sort by</label>
-            <select id="f-sort">
-              <option value="name">Name</option>
-              <option value="release_date" selected>Release date</option>
-              <option value="hp">HP</option>
-              <option value="set">Set</option>
-              <option value="rarity">Rarity</option>
-            </select>
-            <button id="f-order" class="order-btn" type="button" data-order="desc" aria-label="Toggle sort order">↓ Desc</button>
-          </div>
-        </div>
-
-        <div id="pocket-grid" class="pocket-grid" aria-live="polite">
-          <!-- cards injected here -->
-        </div>
-
-        <div id="pocket-empty" class="pocket-empty hidden">
-          <p>No cards match these filters.</p>
-          <button id="empty-clear" class="clear-btn" type="button">Clear filters</button>
-        </div>
-
-        <div id="pocket-error" class="pocket-error hidden">
-          <p>Couldn't reach the API. Is the Flask server running on port 5000?</p>
-        </div>
-
-        <div class="pagination" id="pagination">
-          <button id="page-prev" type="button">← Prev</button>
-          <span id="page-info">Page 1</span>
-          <button id="page-next" type="button">Next →</button>
-        </div>
-      </div>
-
-    </div>
-  </section>
-
-</section>
-
-<section id="tab-stats" class="app-tab">
-
-  <section class="stat-strip" id="stat-strip" aria-label="Dataset overview">
-    <div class="stat-card">
-      <span class="stat-label">Cards</span>
-      <span class="stat-value" id="stat-total-cards">—</span>
-    </div>
-    <div class="stat-card">
-      <span class="stat-label">Sets</span>
-      <span class="stat-value" id="stat-total-sets">—</span>
-    </div>
-    <div class="stat-card">
-      <span class="stat-label">Series</span>
-      <span class="stat-value" id="stat-total-series">—</span>
-    </div>
-    <div class="stat-card">
-      <span class="stat-label">Artists</span>
-      <span class="stat-value" id="stat-total-artists">—</span>
-    </div>
-    <div class="stat-card">
-      <span class="stat-label">Years covered</span>
-      <span class="stat-value" id="stat-years">—</span>
-    </div>
-    <div class="stat-card">
-      <span class="stat-label">Avg HP</span>
-      <span class="stat-value" id="stat-avg-hp">—</span>
-    </div>
-  </section>
-
-  <section class="showcase" aria-label="Catalog analytics">
-    <h2 class="section-title">Showcase pages</h2>
-    <div class="showcase-grid">
-      <div class="showcase-page">
-        <div class="page-tab">01 — Rarity</div>
-        <h3>Top 10 most card rarities</h3>
-        <div class="chart-wrap"><canvas id="chart-rarity"></canvas></div>
-      </div>
-      <div class="showcase-page">
-        <div class="page-tab">02 — Type</div>
-        <h3>Cards by energy type</h3>
-        <div class="chart-wrap"><canvas id="chart-type"></canvas></div>
-      </div>
-      <div class="showcase-page wide">
-        <div class="page-tab">03 — Timeline</div>
-        <h3>Cards printed per year</h3>
-        <div class="chart-wrap"><canvas id="chart-year"></canvas></div>
-      </div>
-      <div class="showcase-page">
-        <div class="page-tab">04 — Artists</div>
-        <h3>Share of the top artist's cards that are secret rares</h3>
-        <div class="chart-wrap chart-wrap-tall" id="chart-artist-wrap"><canvas id="chart-artist"></canvas></div>
-      </div>
-      <div class="showcase-page wide">
-        <div class="page-tab">05 — Rarity mix</div>
-        <h3>Rarity inflation over time</h3>
-        <div class="chart-wrap"><canvas id="chart-rarity-year"></canvas></div>
-      </div>
-    </div>
-  </section>
-
-</section>
-
-</main>
-
-<footer class="site-footer">
-  <p>Data: Pokémon TCG API via Kaggle (adampq/pokemon-tcg-all-cards-1999-2023) · Built with Flask + pandas + Chart.js</p>
-</footer>
+</div>
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <script src="app.js"></script>
