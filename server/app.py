@@ -13,6 +13,8 @@ Endpoints:
     GET /api/stats/by-artist  Card count by artist (top N)
     GET /api/stats/by-year    Card count by release year
     GET /api/stats/overview   Headline numbers for the dashboard
+    GET /api/stats/rarity-by-year   Rarity-tier mix (% of that year's cards) per release year
+    GET /api/stats/artist-rarity    Chase-card rate (share of non-base rarities) for top artists
 """
 
 import os
@@ -74,8 +76,8 @@ FILTERS_CACHE = {
     "series": distinct_values("series"),
     "generations": distinct_values("generation"),
     "rarities": distinct_values("rarity"),
-    "types": distinct_values("primary_type"),
     "supertypes": distinct_values("supertype"),
+    "artists": distinct_values("artist"),
     "series_sets": (
         df.dropna(subset=["series", "set"])
         .groupby("series")["set"]
@@ -116,6 +118,64 @@ STATS_BY_YEAR = clean_records(
     grouped_stats(df, "release_year", avg_hp=False, sort_col="release_year", ascending=True).to_dict(orient="records")
 )
 
+# ---------------------------------------------------------------------------
+# Rarity-tier mix over time: share of each year's cards taken up by each of
+# the handful of most common rarities, everything else lumped into "Other".
+# Powers a 100%-stacked-area chart showing "chase rarity" tiers crowding out
+# the base tiers (Common/Uncommon/Rare) as the game has aged.
+# ---------------------------------------------------------------------------
+_TOP_RARITIES = df["rarity"].value_counts().head(7).index.tolist()
+
+_year_rarity = df[["release_year", "rarity"]].copy()
+_year_rarity["rarity_bucket"] = _year_rarity["rarity"].where(_year_rarity["rarity"].isin(_TOP_RARITIES), "Other")
+_year_rarity_counts = (
+    _year_rarity.groupby(["release_year", "rarity_bucket"]).size().unstack(fill_value=0).sort_index()
+)
+_year_rarity_pct = _year_rarity_counts.div(_year_rarity_counts.sum(axis=1), axis=0).mul(100).round(1)
+
+STATS_RARITY_BY_YEAR = {
+    "years": _year_rarity_pct.index.tolist(),
+    "rarities": [*_TOP_RARITIES, "Other"],
+    "series": {col: _year_rarity_pct[col].tolist() for col in [*_TOP_RARITIES, "Other"]},
+}
+
+# ---------------------------------------------------------------------------
+# Chase-card rate per artist: a card is a "chase" print if its printed set
+# number exceeds the set's printed total (e.g. "108/102") — the numbering
+# scheme sets have used for secret rares, and (in newer sets) some
+# Rainbow/Special Illustration Rares that also sit past the main total.
+# `set_number` is a display string ("num/total", or a bare code like "H1"
+# for promos/sub-numbering with no fixed total); only the "num/total" form
+# can be evaluated, so anything else is excluded rather than assumed non-chase.
+# Only considers artists with a meaningful body of work.
+# ---------------------------------------------------------------------------
+_MIN_ARTIST_CARDS = 40
+
+
+def _is_chase_set_number(set_number):
+    num, sep, total = str(set_number).partition("/")
+    if not sep or not num.isdigit() or not total.isdigit():
+        return None
+    return int(num) > int(total)
+
+
+_artist_df = df.loc[df["artist"] != "Unknown", ["id", "artist", "set_number"]].copy()
+_artist_df["is_chase"] = _artist_df["set_number"].apply(_is_chase_set_number)
+_artist_df = _artist_df.dropna(subset=["is_chase"])
+_artist_df["is_chase"] = _artist_df["is_chase"].astype(bool)
+_artist_agg = (
+    _artist_df.groupby("artist")
+    .agg(card_count=("id", "count"), chase_count=("is_chase", "sum"))
+    .reset_index()
+)
+_artist_agg = _artist_agg[(_artist_agg["card_count"] >= _MIN_ARTIST_CARDS) & (_artist_agg["chase_count"] > 0)]
+_artist_agg["chase_pct"] = (_artist_agg["chase_count"] / _artist_agg["card_count"] * 100).round(1)
+_artist_agg["base_count"] = _artist_agg["card_count"] - _artist_agg["chase_count"]
+_artist_agg = _artist_agg[_artist_agg["chase_pct"] > 5]
+_artist_agg = _artist_agg.sort_values("chase_pct", ascending=False)
+
+STATS_ARTIST_RARITY = clean_records(_artist_agg.to_dict(orient="records"))
+
 
 @app.route("/")
 def serve_client():
@@ -143,7 +203,7 @@ def cards():
         set        exact match on set name (repeatable for multiple sets)
         series     exact match on series name (repeatable)
         rarity     exact match on rarity (repeatable)
-        type       exact match on primary_type (repeatable)
+        artist     exact match on artist (repeatable)
         supertype  exact match on supertype (Pokémon/Trainer/Energy) (repeatable)
         year_from  release_year >=
         year_to    release_year <=
@@ -164,7 +224,7 @@ def cards():
         ("set", "set"),
         ("series", "series"),
         ("rarity", "rarity"),
-        ("primary_type", "type"),
+        ("artist", "artist"),
         ("supertype", "supertype"),
         ("generation", "generation"),
     ]:
@@ -261,6 +321,18 @@ def stats_by_artist():
 @app.route("/api/stats/by-year")
 def stats_by_year():
     return jsonify(STATS_BY_YEAR)
+
+
+@app.route("/api/stats/rarity-by-year")
+def stats_rarity_by_year():
+    return jsonify(STATS_RARITY_BY_YEAR)
+
+
+@app.route("/api/stats/artist-rarity")
+def stats_artist_rarity():
+    limit = request.args.get("limit", default=12, type=int)
+    records = STATS_ARTIST_RARITY if limit < 0 else STATS_ARTIST_RARITY[:limit]
+    return jsonify(records)
 
 
 if __name__ == "__main__":

@@ -83,8 +83,8 @@
           </div>
 
           <div class="filter-group">
-            <label class="tab-label">Energy type</label>
-            <div class="multiselect" id="ms-type">
+            <label class="tab-label">Artist</label>
+            <div class="multiselect" id="ms-artist">
               <button type="button" class="ms-trigger">All</button>
               <div class="ms-panel hidden"></div>
             </div>
@@ -192,8 +192,13 @@
       </div>
       <div class="showcase-page">
         <div class="page-tab">04 — Artists</div>
-        <h3>Top artists by card count</h3>
-        <div class="chart-wrap"><canvas id="chart-artist"></canvas></div>
+        <h3>Share of the top artist's cards that are secret rares</h3>
+        <div class="chart-wrap chart-wrap-tall" id="chart-artist-wrap"><canvas id="chart-artist"></canvas></div>
+      </div>
+      <div class="showcase-page wide">
+        <div class="page-tab">05 — Rarity mix</div>
+        <h3>Rarity inflation over time</h3>
+        <div class="chart-wrap"><canvas id="chart-rarity-year"></canvas></div>
       </div>
     </div>
   </section>

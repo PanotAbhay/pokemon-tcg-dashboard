@@ -483,9 +483,17 @@ select { appearance: none; cursor: pointer; }
 }
 
 .card-pocket.expanded .card-tier-3 {
-  max-height: 200px;
+  max-height: 480px;
   opacity: 1;
   margin-top: 10px;
+}
+
+.card-art {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  border-radius: 6px;
+  margin-bottom: 10px;
 }
 
 .card-tags {

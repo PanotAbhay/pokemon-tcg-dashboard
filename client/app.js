@@ -9,7 +9,7 @@ const state = {
     series: [],
     set: [],
     rarity: [],
-    type: [],
+    artist: [],
     year_from: '',
     year_to: '',
   },
@@ -152,27 +152,44 @@ const CHART_COLORS = {
   grid: 'rgba(241, 250, 238, 0.08)',
 };
 
+// Validated categorical palette (dataviz skill reference palette, dark steps),
+// re-checked against this app's --ink surface (#1D3557) — CVD-safe adjacent
+// ordering, do not reorder or regenerate hues at runtime.
+const CATEGORICAL_PALETTE = [
+  '#3987e5', // blue
+  '#d95926', // orange
+  '#199e70', // aqua
+  '#c98500', // yellow
+  '#d55181', // magenta
+  '#008300', // green
+  '#9085e9', // violet
+  '#e66767', // red
+];
+
+function categoricalColor(index, alpha = 1) {
+  const hex = CATEGORICAL_PALETTE[index % CATEGORICAL_PALETTE.length];
+  if (alpha === 1) return hex;
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
 const TYPE_COLOR_MAP = {
-  Fire: '#E6194B',
-  Water: '#4363D8',
-  Grass: '#3CB44B',
-  Lightning: '#FFE119',
-  Fighting: '#F58231',
-  Psychic: '#911EB4',
-  Darkness: '#0B1B33',
-  Metal: '#AAAAAA',
-  Dragon: '#00E5FF',
-  Fairy: '#FF2D95',
-  Colorless: '#F1FAEE',
+  Fire: categoricalColor(7),
+  Water: categoricalColor(0),
+  Grass: categoricalColor(2),
+  Lightning: categoricalColor(3),
+  Fighting: categoricalColor(1),
+  Psychic: categoricalColor(6),
+  Darkness: CHART_COLORS.dim,
+  Metal: categoricalColor(4),
+  Dragon: categoricalColor(0, 0.6),
+  Fairy: categoricalColor(4, 0.6),
+  Colorless: CHART_COLORS.cream,
 };
 
 // ---------- Rarity chart helpers ----------
-
-// Evenly-spaced hues (golden angle) so adjacent bars are never visually similar.
-function distinctColor(index, alpha = 1) {
-  const hue = (index * 137.508) % 360;
-  return alpha === 1 ? `hsl(${hue}, 72%, 58%)` : `hsla(${hue}, 72%, 58%, ${alpha})`;
-}
 
 // Pixel span of one horizontal bar's actual rendered length (not the whole chart
 // width) — needed so a gradient painted on a short bar isn't just its leftmost sliver.
@@ -196,7 +213,7 @@ function makeGradient(chart, dataIndex, colorStops, fallback) {
 const RAINBOW_STOPS = ['#FF0000', '#FF9900', '#FFEE00', '#33CC33', '#3388FF', '#6633CC', '#CC33CC'];
 const CHROME_STOPS = ['#5B6470', '#E8ECF0', '#FFFFFF', '#AEB6BF', '#8A94A0', '#F4F6F8'];
 
-// Special-styled bars, keyed by rarity value; anything else falls back to distinctColor().
+// Special-styled bars, keyed by rarity value; anything else falls back to categoricalColor().
 const RARITY_BAR_STYLE = {
   'Rainbow Rare': (chart, i) => makeGradient(chart, i, RAINBOW_STOPS, CHART_COLORS.red),
   'Secret Rare': (chart, i) => makeGradient(chart, i, CHROME_STOPS, CHART_COLORS.frosted),
@@ -205,7 +222,7 @@ const RARITY_BAR_STYLE = {
 function rarityBarColor(context, rarities) {
   const rarity = rarities[context.dataIndex].rarity;
   const styleFn = RARITY_BAR_STYLE[rarity];
-  return styleFn ? styleFn(context.chart, context.dataIndex) : distinctColor(context.dataIndex);
+  return styleFn ? styleFn(context.chart, context.dataIndex) : categoricalColor(context.dataIndex);
 }
 
 Chart.defaults.color = CHART_COLORS.dim;
@@ -347,39 +364,86 @@ async function loadYearChart() {
 }
 
 async function loadArtistChart() {
-  const data = await fetchJSON(`${API_BASE}/stats/by-artist`);
+  const data = await fetchJSON(`${API_BASE}/stats/artist-rarity?limit=-1`);
+  document.getElementById('chart-artist-wrap').style.height = `${Math.max(620, data.length * 16)}px`;
   const ctx = document.getElementById('chart-artist');
   charts.artist = new Chart(ctx, {
-    type: 'polarArea',
+    type: 'bar',
     data: {
       labels: data.map((d) => d.artist),
       datasets: [
         {
-          data: data.map((d) => d.card_count),
-          backgroundColor: data.map((d, i) => distinctColor(i, 0.75)),
-          borderColor: CHART_COLORS.cream,
-          borderWidth: 1,
+          label: 'Secret-rare rate (%)',
+          data: data.map((d) => d.chase_pct),
+          backgroundColor: data.map((d, i) => categoricalColor(i, 0.85)),
+          borderRadius: 3,
         },
       ],
     },
     options: {
       responsive: true,
       maintainAspectRatio: false,
+      indexAxis: 'y',
       plugins: {
-        legend: {
-          position: 'right',
-          labels: { boxWidth: 10, padding: 8, font: { size: 10.5 } },
-        },
+        legend: { display: false },
         tooltip: {
           callbacks: {
-            label: (ctx) => `${ctx.label}: ${numberFmt.format(ctx.raw)} cards`,
+            label: (ctx) => {
+              const d = data[ctx.dataIndex];
+              return `${d.chase_pct}% — ${d.chase_count} of ${d.card_count} cards were secret rare`;
+            },
           },
         },
       },
       scales: {
-        r: {
-          grid: { color: CHART_COLORS.grid },
-          ticks: { display: false },
+        x: { ...countAxis(), min: 0, ticks: { callback: (v) => `${v}%` } },
+        y: { ...hiddenGridAxis(), ticks: { autoSkip: false } },
+      },
+    },
+  });
+}
+
+async function loadRarityByYearChart() {
+  const data = await fetchJSON(`${API_BASE}/stats/rarity-by-year`);
+  const ctx = document.getElementById('chart-rarity-year');
+  charts.rarityYear = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: data.years,
+      datasets: data.rarities.map((rarity, i) => ({
+        label: rarity,
+        data: data.series[rarity],
+        borderColor: categoricalColor(i),
+        backgroundColor: categoricalColor(i, 0.85),
+        fill: 'stack',
+        tension: 0.2,
+        pointRadius: 0,
+        borderWidth: 1,
+      })),
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: {
+          position: 'bottom',
+          labels: { boxWidth: 10, padding: 8, font: { size: 10.5 } },
+        },
+        tooltip: {
+          callbacks: {
+            label: (ctx) => `${ctx.dataset.label}: ${ctx.parsed.y}%`,
+          },
+        },
+      },
+      scales: {
+        x: hiddenGridAxis(),
+        y: {
+          ...countAxis(),
+          stacked: true,
+          min: 0,
+          max: 100,
+          ticks: { callback: (v) => `${v}%` },
         },
       },
     },
@@ -414,13 +478,13 @@ async function loadFilterOptions() {
   multiSelects.series = createMultiSelect('ms-series');
   multiSelects.set = createMultiSelect('ms-set');
   multiSelects.rarity = createMultiSelect('ms-rarity');
-  multiSelects.type = createMultiSelect('ms-type');
+  multiSelects.artist = createMultiSelect('ms-artist');
 
   multiSelects.supertype.setOptions(toOptions(data.supertypes));
   multiSelects.series.setOptions(toOptions(data.series));
   multiSelects.set.setOptions(toOptions(allSets));
   multiSelects.rarity.setOptions(toOptions(data.rarities));
-  multiSelects.type.setOptions(toOptions(data.types));
+  multiSelects.artist.setOptions(toOptions(data.artists));
 
   // Selecting a series narrows the Set dropdown to only sets within that series.
   multiSelects.series.onChange(() => {
@@ -443,7 +507,7 @@ function readFiltersFromForm() {
   state.filters.series = multiSelects.series.getSelected();
   state.filters.set = multiSelects.set.getSelected();
   state.filters.rarity = multiSelects.rarity.getSelected();
-  state.filters.type = multiSelects.type.getSelected();
+  state.filters.artist = multiSelects.artist.getSelected();
   state.filters.year_from = document.getElementById('f-year-from').value;
   state.filters.year_to = document.getElementById('f-year-to').value;
 }
@@ -511,6 +575,15 @@ function renderCards(cards) {
     // Tier 3 (click to expand): everything else.
     const tier3 = document.createElement('div');
     tier3.className = 'card-tier card-tier-3';
+
+    const img = document.createElement('img');
+    img.className = 'card-art';
+    img.loading = 'lazy';
+    img.alt = card.name;
+    const dashIndex = card.id.lastIndexOf('-');
+    img.src = `https://images.pokemontcg.io/${card.id.slice(0, dashIndex)}/${card.id.slice(dashIndex + 1)}.png`;
+    img.onerror = () => img.remove();
+    tier3.appendChild(img);
 
     const tags = document.createElement('div');
     tags.className = 'card-tags';
@@ -638,7 +711,14 @@ function switchTab(tab) {
 
   if (tab === 'stats' && !statsLoaded) {
     statsLoaded = true;
-    Promise.allSettled([loadOverview(), loadRarityChart(), loadTypeChart(), loadYearChart(), loadArtistChart()]);
+    Promise.allSettled([
+      loadOverview(),
+      loadRarityChart(),
+      loadTypeChart(),
+      loadYearChart(),
+      loadArtistChart(),
+      loadRarityByYearChart(),
+    ]);
   }
 }
 
