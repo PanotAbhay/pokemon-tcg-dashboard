@@ -18,6 +18,8 @@ The dataset holds card *attributes* only (name, set, series, rarity, type, HP, a
 - `hp` and `retreat_cost` are legitimately null for Trainer/Energy cards — left as `null` (not imputed to 0, which would misread as "0 HP"). The API converts `NaN` to JSON `null`.
 - Rows missing `name`, `set`, or an unparseable `release_date` are dropped (0 rows affected — source was already clean). Deduplicated on `id` (0 duplicates found).
 - `"Rare Ultra"` is merged into `"Ultra Rare"` — the same rarity tier appeared under two name orders in the source data.
+- Every other `"Rare X"` rarity is canonicalized to `"X Rare"` (e.g. `"Rare Holo"` → `"Holo Rare"`, `"Rare Secret"` → `"Secret Rare"`) so rarity names read naturally everywhere the API returns them — filters, sorting, and charts.
+- 295 cards had a null rarity in the source data (basic Energy reprints, Southern Islands, EX Trainer Kits, Pokémon Rumble, McDonald's Collection, Pokémon Futsal Collection, the Kalos Starter Set, and 3 Dragon Vault cards) — there's no such thing as an "Unknown" rarity in the actual card game, so each was individually verified against Serebii/Bulbapedia/official pokemon.com card pages and hardcoded via `RARITY_OVERRIDES` in `data_loader.py`.
 
 ## 2. Architecture
 

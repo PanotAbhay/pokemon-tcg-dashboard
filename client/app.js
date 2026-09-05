@@ -13,8 +13,8 @@ const state = {
     year_from: '',
     year_to: '',
   },
-  sort_by: 'name',
-  order: 'asc',
+  sort_by: 'release_date',
+  order: 'desc',
   page: 1,
   page_size: 24,
 };
@@ -168,16 +168,6 @@ const TYPE_COLOR_MAP = {
 
 // ---------- Rarity chart helpers ----------
 
-// Rarities like "Rare Rainbow" / "Rare Secret" read backwards — move a
-// leading/embedded "Rare" to the end so they read "Rainbow Rare", "Secret Rare", etc.
-function reorderRarityLabel(rarity) {
-  const words = rarity.split(' ');
-  if (words.length > 1 && words.includes('Rare') && words[words.length - 1] !== 'Rare') {
-    return [...words.filter((w) => w !== 'Rare'), 'Rare'].join(' ');
-  }
-  return rarity;
-}
-
 // Evenly-spaced hues (golden angle) so adjacent bars are never visually similar.
 function distinctColor(index, alpha = 1) {
   const hue = (index * 137.508) % 360;
@@ -192,38 +182,44 @@ function barPixelRange(chart, dataIndex) {
   return [scale.getPixelForValue(0), scale.getPixelForValue(value)];
 }
 
-function makeRainbowGradient(chart, dataIndex) {
+function makeGradient(chart, dataIndex, colorStops, fallback) {
   const { ctx, chartArea } = chart;
-  if (!chartArea) return CHART_COLORS.red;
+  if (!chartArea) return fallback;
   const [x0, x1] = barPixelRange(chart, dataIndex);
   const gradient = ctx.createLinearGradient(x0, 0, x1, 0);
-  ['#FF0000', '#FF9900', '#FFEE00', '#33CC33', '#3388FF', '#6633CC', '#CC33CC'].forEach((color, i, arr) => {
+  colorStops.forEach((color, i, arr) => {
     gradient.addColorStop(i / (arr.length - 1), color);
   });
   return gradient;
 }
 
-function makeChromeGradient(chart, dataIndex) {
-  const { ctx, chartArea } = chart;
-  if (!chartArea) return CHART_COLORS.frosted;
-  const [x0, x1] = barPixelRange(chart, dataIndex);
-  const gradient = ctx.createLinearGradient(x0, 0, x1, 0);
-  ['#5B6470', '#E8ECF0', '#FFFFFF', '#AEB6BF', '#8A94A0', '#F4F6F8'].forEach((color, i, arr) => {
-    gradient.addColorStop(i / (arr.length - 1), color);
-  });
-  return gradient;
-}
+const RAINBOW_STOPS = ['#FF0000', '#FF9900', '#FFEE00', '#33CC33', '#3388FF', '#6633CC', '#CC33CC'];
+const CHROME_STOPS = ['#5B6470', '#E8ECF0', '#FFFFFF', '#AEB6BF', '#8A94A0', '#F4F6F8'];
 
-function rarityBarColor(context, rawRarities) {
-  const raw = rawRarities[context.dataIndex];
-  if (raw === 'Rare Rainbow') return makeRainbowGradient(context.chart, context.dataIndex);
-  if (raw === 'Rare Secret') return makeChromeGradient(context.chart, context.dataIndex);
-  return distinctColor(context.dataIndex);
+// Special-styled bars, keyed by rarity value; anything else falls back to distinctColor().
+const RARITY_BAR_STYLE = {
+  'Rainbow Rare': (chart, i) => makeGradient(chart, i, RAINBOW_STOPS, CHART_COLORS.red),
+  'Secret Rare': (chart, i) => makeGradient(chart, i, CHROME_STOPS, CHART_COLORS.frosted),
+};
+
+function rarityBarColor(context, rarities) {
+  const rarity = rarities[context.dataIndex].rarity;
+  const styleFn = RARITY_BAR_STYLE[rarity];
+  return styleFn ? styleFn(context.chart, context.dataIndex) : distinctColor(context.dataIndex);
 }
 
 Chart.defaults.color = CHART_COLORS.dim;
 Chart.defaults.font.family = "'Inter', sans-serif";
 Chart.defaults.font.size = 11.5;
+
+// Shared axis/legend shapes reused across the count-based charts below.
+function countAxis() {
+  return { grid: { color: CHART_COLORS.grid }, ticks: { callback: (v) => numberFmt.format(v) } };
+}
+
+function hiddenGridAxis() {
+  return { grid: { display: false } };
+}
 
 // ---------- Overview stats ----------
 
@@ -242,17 +238,16 @@ async function loadOverview() {
 async function loadRarityChart() {
   const data = await fetchJSON(`${API_BASE}/stats/by-rarity`);
   const top = data.slice(0, 10);
-  const rawRarities = top.map((d) => d.rarity);
   const ctx = document.getElementById('chart-rarity');
   charts.rarity = new Chart(ctx, {
     type: 'bar',
     data: {
-      labels: top.map((d) => reorderRarityLabel(d.rarity)),
+      labels: top.map((d) => d.rarity),
       datasets: [
         {
           label: 'Card count',
           data: top.map((d) => d.card_count),
-          backgroundColor: (context) => rarityBarColor(context, rawRarities),
+          backgroundColor: (context) => rarityBarColor(context, top),
           borderRadius: 3,
         },
       ],
@@ -270,8 +265,8 @@ async function loadRarityChart() {
         },
       },
       scales: {
-        x: { grid: { color: CHART_COLORS.grid }, ticks: { callback: (v) => numberFmt.format(v) } },
-        y: { grid: { display: false }, ticks: { autoSkip: false } },
+        x: countAxis(),
+        y: { ...hiddenGridAxis(), ticks: { autoSkip: false } },
       },
     },
   });
@@ -305,8 +300,8 @@ async function loadTypeChart() {
         },
       },
       scales: {
-        x: { grid: { display: false } },
-        y: { grid: { color: CHART_COLORS.grid }, ticks: { callback: (v) => numberFmt.format(v) } },
+        x: hiddenGridAxis(),
+        y: countAxis(),
       },
     },
   });
@@ -344,8 +339,8 @@ async function loadYearChart() {
         },
       },
       scales: {
-        x: { grid: { display: false } },
-        y: { grid: { color: CHART_COLORS.grid }, ticks: { callback: (v) => numberFmt.format(v) } },
+        x: hiddenGridAxis(),
+        y: countAxis(),
       },
     },
   });
@@ -397,8 +392,8 @@ const multiSelects = {};
 let allSets = [];
 let seriesSetsMap = {};
 
-function toOptions(values) {
-  return values.map((v) => ({ value: v, label: v }));
+function toOptions(values, labelFn = (v) => v) {
+  return values.map((v) => ({ value: v, label: labelFn(v) }));
 }
 
 // Options available in the Set filter, given whichever series are currently selected.
@@ -424,7 +419,7 @@ async function loadFilterOptions() {
   multiSelects.supertype.setOptions(toOptions(data.supertypes));
   multiSelects.series.setOptions(toOptions(data.series));
   multiSelects.set.setOptions(toOptions(allSets));
-  multiSelects.rarity.setOptions(data.rarities.map((r) => ({ value: r, label: reorderRarityLabel(r) })));
+  multiSelects.rarity.setOptions(toOptions(data.rarities));
   multiSelects.type.setOptions(toOptions(data.types));
 
   // Selecting a series narrows the Set dropdown to only sets within that series.
@@ -482,41 +477,55 @@ function renderCards(cards) {
   cards.forEach((card) => {
     const el = document.createElement('div');
     el.className = 'card-pocket';
+    el.tabIndex = 0;
+    el.setAttribute('role', 'button');
+    el.setAttribute('aria-expanded', 'false');
 
-    const top = document.createElement('div');
-    top.className = 'card-pocket-top';
+    // Tier 1 (always visible): name, rarity, set.
+    const tier1 = document.createElement('div');
+    tier1.className = 'card-tier card-tier-1';
 
     const name = document.createElement('span');
     name.className = 'card-name';
     name.textContent = card.name;
-    top.appendChild(name);
-
-    if (card.hp !== null && card.hp !== undefined) {
-      const hp = document.createElement('span');
-      hp.className = 'card-hp';
-      hp.textContent = `${Math.round(card.hp)} HP`;
-      top.appendChild(hp);
-    }
-
-    el.appendChild(top);
-
-    const meta = document.createElement('div');
-    meta.className = 'card-meta';
-    meta.textContent = `${card.set} · ${card.release_date}`;
-    el.appendChild(meta);
-
-    const tags = document.createElement('div');
-    tags.className = 'card-tags';
+    tier1.appendChild(name);
 
     const rarityTag = document.createElement('span');
     rarityTag.className = 'tag rarity';
     rarityTag.textContent = card.rarity;
-    tags.appendChild(rarityTag);
+    tier1.appendChild(rarityTag);
+
+    const setLine = document.createElement('div');
+    setLine.className = 'card-set';
+    setLine.textContent = card.set_number ? `${card.set} · ${card.set_number}` : card.set;
+    tier1.appendChild(setLine);
+
+    el.appendChild(tier1);
+
+    // Tier 2 (hover, or expanded): series + release date.
+    const tier2 = document.createElement('div');
+    tier2.className = 'card-tier card-tier-2';
+    tier2.textContent = `${card.series} · ${card.release_date}`;
+    el.appendChild(tier2);
+
+    // Tier 3 (click to expand): everything else.
+    const tier3 = document.createElement('div');
+    tier3.className = 'card-tier card-tier-3';
+
+    const tags = document.createElement('div');
+    tags.className = 'card-tags';
+
+    if (card.hp !== null && card.hp !== undefined) {
+      const hp = document.createElement('span');
+      hp.className = 'tag hp';
+      hp.textContent = `${Math.round(card.hp)} HP`;
+      tags.appendChild(hp);
+    }
 
     if (card.primary_type) {
       const typeTag = document.createElement('span');
       typeTag.className = 'tag type';
-      typeTag.textContent = card.primary_type;
+      typeTag.textContent = card.types_display || card.primary_type;
       tags.appendChild(typeTag);
     }
 
@@ -525,7 +534,48 @@ function renderCards(cards) {
     supertypeTag.textContent = card.supertype;
     tags.appendChild(supertypeTag);
 
-    el.appendChild(tags);
+    if (card.retreat_cost !== null && card.retreat_cost !== undefined) {
+      const retreatTag = document.createElement('span');
+      retreatTag.className = 'tag';
+      retreatTag.textContent = `Retreat: ${Math.round(card.retreat_cost)}`;
+      tags.appendChild(retreatTag);
+    }
+
+    tier3.appendChild(tags);
+
+    const details = document.createElement('div');
+    details.className = 'card-details';
+
+    const genLine = document.createElement('span');
+    genLine.textContent = `Generation: ${card.generation ?? '—'}`;
+    details.appendChild(genLine);
+
+    const artistLine = document.createElement('span');
+    artistLine.textContent = `Artist: ${card.artist ?? 'Unknown'}`;
+    details.appendChild(artistLine);
+
+    tier3.appendChild(details);
+
+    el.appendChild(tier3);
+
+    el.addEventListener('click', () => {
+      const willExpand = !el.classList.contains('expanded');
+      grid.querySelectorAll('.card-pocket.expanded').forEach((other) => {
+        if (other !== el) {
+          other.classList.remove('expanded');
+          other.setAttribute('aria-expanded', 'false');
+        }
+      });
+      el.classList.toggle('expanded', willExpand);
+      el.setAttribute('aria-expanded', String(willExpand));
+    });
+    el.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        el.click();
+      }
+    });
+
     grid.appendChild(el);
   });
 }
@@ -542,14 +592,7 @@ async function loadCards() {
   renderCardSkeletons();
 
   const params = {
-    q: state.filters.q,
-    supertype: state.filters.supertype,
-    series: state.filters.series,
-    set: state.filters.set,
-    rarity: state.filters.rarity,
-    type: state.filters.type,
-    year_from: state.filters.year_from,
-    year_to: state.filters.year_to,
+    ...state.filters,
     sort_by: state.sort_by,
     order: state.order,
     page: state.page,
@@ -638,19 +681,15 @@ function wireEvents() {
     loadCards();
   });
 
-  document.getElementById('page-prev').addEventListener('click', () => {
-    if (state.page > 1) {
-      state.page -= 1;
-      loadCards();
-      window.scrollTo({ top: document.querySelector('.binder').offsetTop - 80, behavior: 'smooth' });
-    }
-  });
+  document.getElementById('page-prev').addEventListener('click', () => changePage(-1));
+  document.getElementById('page-next').addEventListener('click', () => changePage(1));
+}
 
-  document.getElementById('page-next').addEventListener('click', () => {
-    state.page += 1;
-    loadCards();
-    window.scrollTo({ top: document.querySelector('.binder').offsetTop - 80, behavior: 'smooth' });
-  });
+function changePage(delta) {
+  if (state.page + delta < 1) return;
+  state.page += delta;
+  loadCards();
+  window.scrollTo({ top: document.querySelector('.binder').offsetTop - 80, behavior: 'smooth' });
 }
 
 // ---------- Init ----------
@@ -658,12 +697,11 @@ function wireEvents() {
 async function init() {
   wireTabs();
   wireEvents();
-  try {
-    await fetchJSON(`${API_BASE}/health`);
-    setConnStatus('ok', 'Connected');
-  } catch (err) {
-    setConnStatus('error', 'Disconnected');
-  }
+
+  // Connection-status dot only; don't block tab/filter/card loading on it.
+  fetchJSON(`${API_BASE}/health`)
+    .then(() => setConnStatus('ok', 'Connected'))
+    .catch(() => setConnStatus('error', 'Disconnected'));
 
   switchTab('stats');
 

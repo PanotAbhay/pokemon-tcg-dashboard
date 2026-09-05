@@ -422,19 +422,25 @@ select { appearance: none; cursor: pointer; }
   padding: 14px 14px 12px;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 0;
+  cursor: pointer;
   transition: border-color 0.12s ease, transform 0.12s ease;
 }
 
-.card-pocket:hover {
+.card-pocket:hover,
+.card-pocket:focus-visible {
   border-color: var(--line-strong);
   transform: translateY(-1px);
 }
 
-.card-pocket-top {
+.card-pocket.expanded {
+  border-color: var(--red-dim);
+}
+
+.card-tier-1 {
   display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
+  flex-wrap: wrap;
+  align-items: center;
   gap: 8px;
 }
 
@@ -444,25 +450,57 @@ select { appearance: none; cursor: pointer; }
   font-size: 15px;
   color: var(--cream);
   line-height: 1.25;
+  flex: 1 1 auto;
 }
 
-.card-hp {
-  font-family: var(--font-mono);
-  font-size: 12px;
-  color: var(--gold);
-  white-space: nowrap;
-}
-
-.card-meta {
+.card-set {
+  flex-basis: 100%;
   font-size: 12px;
   color: var(--text-dim);
+}
+
+.card-tier-2 {
+  font-size: 12px;
+  color: var(--text-dim);
+  max-height: 0;
+  opacity: 0;
+  overflow: hidden;
+  transition: max-height 0.15s ease, opacity 0.15s ease, margin-top 0.15s ease;
+}
+
+.card-pocket:hover .card-tier-2,
+.card-pocket.expanded .card-tier-2 {
+  max-height: 40px;
+  opacity: 1;
+  margin-top: 8px;
+}
+
+.card-tier-3 {
+  max-height: 0;
+  opacity: 0;
+  overflow: hidden;
+  transition: max-height 0.2s ease, opacity 0.2s ease, margin-top 0.2s ease;
+}
+
+.card-pocket.expanded .card-tier-3 {
+  max-height: 200px;
+  opacity: 1;
+  margin-top: 10px;
 }
 
 .card-tags {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
-  margin-top: 2px;
+}
+
+.card-details {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--text-dim);
 }
 
 .tag {
@@ -476,6 +514,7 @@ select { appearance: none; cursor: pointer; }
 
 .tag.rarity { border-color: var(--red-dim); color: var(--red); }
 .tag.type { border-color: var(--teal); color: var(--teal); }
+.tag.hp { border-color: var(--gold); color: var(--gold); }
 
 .pocket-empty,
 .pocket-error {

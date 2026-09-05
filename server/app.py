@@ -23,6 +23,7 @@ from flask_cors import CORS
 
 DATA_PATH = os.path.join(os.path.dirname(__file__), "..", "data", "processed", "pokemon_cards_clean.csv")
 CLIENT_DIR = os.path.join(os.path.dirname(__file__), "..", "client")
+DATE_FMT = "%Y-%m-%d"
 
 app = Flask(__name__, static_folder=CLIENT_DIR, static_url_path="")
 CORS(app)  # enable CORS for all routes so the client can be served separately
@@ -43,9 +44,84 @@ def clean_records(records):
 def error_response(message, status=400):
     return jsonify({"error": message}), status
 
+
+def distinct_values(column):
+    return sorted(df[column].dropna().unique().tolist())
+
+
+def grouped_stats(source_df, by, avg_hp=True, extra_agg=None, sort_col="card_count", ascending=False):
+    """Shared groupby -> count (+ optional avg HP / extra agg) -> sort recipe used by every /api/stats/* route."""
+    agg = {"card_count": ("id", "count")}
+    if avg_hp:
+        agg["avg_hp"] = ("hp", "mean")
+    if extra_agg:
+        agg.update(extra_agg)
+    grouped = source_df.groupby(by).agg(**agg).reset_index().sort_values(sort_col, ascending=ascending)
+    if avg_hp:
+        grouped["avg_hp"] = grouped["avg_hp"].round(1)
+    return grouped
+
+
+# ---------------------------------------------------------------------------
+# Precomputed at startup: `df` never changes after load, so every /api/filters
+# and /api/stats/* value below would otherwise be recomputed identically on
+# every single request. Routes just serve these cached, already-JSON-safe
+# results (sliced by `limit` where the route supports one).
+# ---------------------------------------------------------------------------
+
+FILTERS_CACHE = {
+    "sets": distinct_values("set"),
+    "series": distinct_values("series"),
+    "generations": distinct_values("generation"),
+    "rarities": distinct_values("rarity"),
+    "types": distinct_values("primary_type"),
+    "supertypes": distinct_values("supertype"),
+    "series_sets": (
+        df.dropna(subset=["series", "set"])
+        .groupby("series")["set"]
+        .apply(lambda s: sorted(s.unique().tolist()))
+        .to_dict()
+    ),
+    "year_min": int(df["release_year"].min()),
+    "year_max": int(df["release_year"].max()),
+}
+
+STATS_OVERVIEW = {
+    "total_cards": int(len(df)),
+    "total_sets": int(df["set"].nunique()),
+    "total_series": int(df["series"].nunique()),
+    "total_artists": int(df["artist"].nunique()),
+    "year_min": int(df["release_year"].min()),
+    "year_max": int(df["release_year"].max()),
+    "avg_hp": round(float(df["hp"].mean()), 1),
+}
+
+STATS_BY_RARITY = clean_records(grouped_stats(df, "rarity").to_dict(orient="records"))
+
+STATS_BY_TYPE = clean_records(
+    grouped_stats(df.dropna(subset=["primary_type"]), "primary_type").to_dict(orient="records")
+)
+
+_by_set = grouped_stats(
+    df, ["set", "series"], extra_agg={"release_date": ("release_date", "min")}, sort_col="release_date", ascending=True
+)
+_by_set["release_date"] = _by_set["release_date"].dt.strftime(DATE_FMT)
+STATS_BY_SET = clean_records(_by_set.to_dict(orient="records"))  # ascending; routes take the tail for "most recent N"
+
+STATS_BY_ARTIST = clean_records(
+    grouped_stats(df[df["artist"] != "Unknown"], "artist", avg_hp=False).to_dict(orient="records")
+)
+
+STATS_BY_YEAR = clean_records(
+    grouped_stats(df, "release_year", avg_hp=False, sort_col="release_year", ascending=True).to_dict(orient="records")
+)
+
+
 @app.route("/")
 def serve_client():
     return send_from_directory(CLIENT_DIR, "index.html")
+
+
 @app.route("/api/health")
 def health():
     return jsonify({"status": "ok", "rows_loaded": len(df)})
@@ -54,25 +130,7 @@ def health():
 @app.route("/api/filters")
 def filters():
     """Distinct values for building filter dropdowns on the client."""
-    series_sets = (
-        df.dropna(subset=["series", "set"])
-        .groupby("series")["set"]
-        .apply(lambda s: sorted(s.unique().tolist()))
-        .to_dict()
-    )
-    return jsonify(
-        {
-            "sets": sorted(df["set"].dropna().unique().tolist()),
-            "series": sorted(df["series"].dropna().unique().tolist()),
-            "generations": sorted(df["generation"].dropna().unique().tolist()),
-            "rarities": sorted(df["rarity"].dropna().unique().tolist()),
-            "types": sorted(df["primary_type"].dropna().unique().tolist()),
-            "supertypes": sorted(df["supertype"].dropna().unique().tolist()),
-            "series_sets": series_sets,
-            "year_min": int(df["release_year"].min()),
-            "year_max": int(df["release_year"].max()),
-        }
-    )
+    return jsonify(FILTERS_CACHE)
 
 
 @app.route("/api/cards")
@@ -96,7 +154,7 @@ def cards():
         page       1-indexed page number (default: 1)
         page_size  results per page (default: 25, max: 200)
     """
-    result = df.copy()
+    result = df
 
     q = request.args.get("q")
     if q:
@@ -147,7 +205,7 @@ def cards():
     start = (page - 1) * page_size
     end = start + page_size
     page_df = result.iloc[start:end].copy()
-    page_df["release_date"] = page_df["release_date"].dt.strftime("%Y-%m-%d")
+    page_df["release_date"] = page_df["release_date"].dt.strftime(DATE_FMT)
 
     return jsonify(
         {
@@ -166,90 +224,43 @@ def card_detail(card_id):
     if row.empty:
         return error_response("Card not found", status=404)
     record = row.copy()
-    record["release_date"] = record["release_date"].dt.strftime("%Y-%m-%d")
+    record["release_date"] = record["release_date"].dt.strftime(DATE_FMT)
     return jsonify(clean_records(record.to_dict(orient="records"))[0])
 
 
 @app.route("/api/stats/overview")
 def stats_overview():
-    return jsonify(
-        {
-            "total_cards": int(len(df)),
-            "total_sets": int(df["set"].nunique()),
-            "total_series": int(df["series"].nunique()),
-            "total_artists": int(df["artist"].nunique()),
-            "year_min": int(df["release_year"].min()),
-            "year_max": int(df["release_year"].max()),
-            "avg_hp": round(float(df["hp"].mean()), 1),
-        }
-    )
+    return jsonify(STATS_OVERVIEW)
 
 
 @app.route("/api/stats/by-rarity")
 def stats_by_rarity():
-    grouped = (
-        df.groupby("rarity")
-        .agg(card_count=("id", "count"), avg_hp=("hp", "mean"))
-        .reset_index()
-        .sort_values("card_count", ascending=False)
-    )
-    grouped["avg_hp"] = grouped["avg_hp"].round(1)
-    return jsonify(clean_records(grouped.to_dict(orient="records")))
+    return jsonify(STATS_BY_RARITY)
 
 
 @app.route("/api/stats/by-type")
 def stats_by_type():
-    grouped = (
-        df.dropna(subset=["primary_type"])
-        .groupby("primary_type")
-        .agg(card_count=("id", "count"), avg_hp=("hp", "mean"))
-        .reset_index()
-        .sort_values("card_count", ascending=False)
-    )
-    grouped["avg_hp"] = grouped["avg_hp"].round(1)
-    return jsonify(clean_records(grouped.to_dict(orient="records")))
+    return jsonify(STATS_BY_TYPE)
 
 
 @app.route("/api/stats/by-set")
 def stats_by_set():
     limit = request.args.get("limit", default=20, type=int)
-    grouped = (
-        df.groupby(["set", "series"])
-        .agg(card_count=("id", "count"), avg_hp=("hp", "mean"), release_date=("release_date", "min"))
-        .reset_index()
-        .sort_values("release_date")
-    )
-    grouped["avg_hp"] = grouped["avg_hp"].round(1)
-    grouped["release_date"] = grouped["release_date"].dt.strftime("%Y-%m-%d")
-    if limit:
-        grouped = grouped.tail(limit)  # most recent N sets by default
-    return jsonify(clean_records(grouped.to_dict(orient="records")))
+    # limit=0 must mean "zero rows", not "no limit" — `if limit:` would treat 0 as falsy.
+    records = STATS_BY_SET if limit < 0 else STATS_BY_SET[-limit:] if limit else []
+    return jsonify(records)
 
 
 @app.route("/api/stats/by-artist")
 def stats_by_artist():
     limit = request.args.get("limit", default=12, type=int)
-    grouped = (
-        df[df["artist"] != "Unknown"]
-        .groupby("artist")
-        .agg(card_count=("id", "count"))
-        .reset_index()
-        .sort_values("card_count", ascending=False)
-    )
-    if limit:
-        grouped = grouped.head(limit)
-    return jsonify(clean_records(grouped.to_dict(orient="records")))
+    records = STATS_BY_ARTIST if limit < 0 else STATS_BY_ARTIST[:limit]
+    return jsonify(records)
 
 
 @app.route("/api/stats/by-year")
 def stats_by_year():
-    grouped = (
-        df.groupby("release_year")
-        .agg(card_count=("id", "count"))
-        .reset_index()
-        .sort_values("release_year")
-    )
-    return jsonify(clean_records(grouped.to_dict(orient="records")))
+    return jsonify(STATS_BY_YEAR)
 
 
 if __name__ == "__main__":
