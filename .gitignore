@@ -23,6 +23,9 @@ Thumbs.db
 # Claude Code local settings
 .claude/settings.local.json
 
+# Claude Code project instructions — kept local only, not published to GitHub
+CLAUDE.md
+
 # Logs
 *.log
 
