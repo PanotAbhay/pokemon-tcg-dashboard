@@ -1,0 +1,222 @@
+{
+  "info": {
+    "name": "Pokemon TCG Card Explorer API",
+    "description": "API surface of server/app.py (Flask). Base URL assumes `python server/app.py` running on http://127.0.0.1:5000.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://127.0.0.1:5000" },
+    { "key": "cardId", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "Health",
+      "item": [
+        {
+          "name": "GET /api/health",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/health", "host": ["{{baseUrl}}"], "path": ["api", "health"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Filters",
+      "item": [
+        {
+          "name": "GET /api/filters",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/filters", "host": ["{{baseUrl}}"], "path": ["api", "filters"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Cards",
+      "item": [
+        {
+          "name": "GET /api/cards (default)",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/cards", "host": ["{{baseUrl}}"], "path": ["api", "cards"] }
+          }
+        },
+        {
+          "name": "GET /api/cards (search q)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/cards?q=pikachu",
+              "host": ["{{baseUrl}}"], "path": ["api", "cards"],
+              "query": [{ "key": "q", "value": "pikachu" }]
+            }
+          }
+        },
+        {
+          "name": "GET /api/cards (repeatable filters)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/cards?set=Base&set=Jungle&rarity=Common&supertype=Pok%C3%A9mon",
+              "host": ["{{baseUrl}}"], "path": ["api", "cards"],
+              "query": [
+                { "key": "set", "value": "Base" },
+                { "key": "set", "value": "Jungle" },
+                { "key": "rarity", "value": "Common" },
+                { "key": "supertype", "value": "Pokémon" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET /api/cards (year + hp range)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/cards?year_from=1999&year_to=2001&hp_min=60&hp_max=120",
+              "host": ["{{baseUrl}}"], "path": ["api", "cards"],
+              "query": [
+                { "key": "year_from", "value": "1999" },
+                { "key": "year_to", "value": "2001" },
+                { "key": "hp_min", "value": "60" },
+                { "key": "hp_max", "value": "120" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET /api/cards (sort + pagination)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/cards?sort_by=hp&order=desc&page=2&page_size=10",
+              "host": ["{{baseUrl}}"], "path": ["api", "cards"],
+              "query": [
+                { "key": "sort_by", "value": "hp" },
+                { "key": "order", "value": "desc" },
+                { "key": "page", "value": "2" },
+                { "key": "page_size", "value": "10" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET /api/cards (invalid sort_by -> 400)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/cards?sort_by=not_a_column",
+              "host": ["{{baseUrl}}"], "path": ["api", "cards"],
+              "query": [{ "key": "sort_by", "value": "not_a_column" }]
+            }
+          }
+        },
+        {
+          "name": "GET /api/cards/:id (valid)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/cards/{{cardId}}",
+              "host": ["{{baseUrl}}"], "path": ["api", "cards", "{{cardId}}"]
+            }
+          }
+        },
+        {
+          "name": "GET /api/cards/:id (not found -> 404)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/cards/does-not-exist",
+              "host": ["{{baseUrl}}"], "path": ["api", "cards", "does-not-exist"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Stats",
+      "item": [
+        {
+          "name": "GET /api/stats/overview",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/stats/overview", "host": ["{{baseUrl}}"], "path": ["api", "stats", "overview"] }
+          }
+        },
+        {
+          "name": "GET /api/stats/by-rarity",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/stats/by-rarity", "host": ["{{baseUrl}}"], "path": ["api", "stats", "by-rarity"] }
+          }
+        },
+        {
+          "name": "GET /api/stats/by-type",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/stats/by-type", "host": ["{{baseUrl}}"], "path": ["api", "stats", "by-type"] }
+          }
+        },
+        {
+          "name": "GET /api/stats/by-set (default limit=20)",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/stats/by-set", "host": ["{{baseUrl}}"], "path": ["api", "stats", "by-set"] }
+          }
+        },
+        {
+          "name": "GET /api/stats/by-set (limit=0 -> empty)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/stats/by-set?limit=0",
+              "host": ["{{baseUrl}}"], "path": ["api", "stats", "by-set"],
+              "query": [{ "key": "limit", "value": "0" }]
+            }
+          }
+        },
+        {
+          "name": "GET /api/stats/by-set (limit=-1 -> all)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/stats/by-set?limit=-1",
+              "host": ["{{baseUrl}}"], "path": ["api", "stats", "by-set"],
+              "query": [{ "key": "limit", "value": "-1" }]
+            }
+          }
+        },
+        {
+          "name": "GET /api/stats/by-artist (default limit=12)",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/stats/by-artist", "host": ["{{baseUrl}}"], "path": ["api", "stats", "by-artist"] }
+          }
+        },
+        {
+          "name": "GET /api/stats/by-year",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/stats/by-year", "host": ["{{baseUrl}}"], "path": ["api", "stats", "by-year"] }
+          }
+        },
+        {
+          "name": "GET /api/stats/rarity-by-year",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/stats/rarity-by-year", "host": ["{{baseUrl}}"], "path": ["api", "stats", "rarity-by-year"] }
+          }
+        },
+        {
+          "name": "GET /api/stats/artist-rarity (default limit=12)",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/stats/artist-rarity", "host": ["{{baseUrl}}"], "path": ["api", "stats", "artist-rarity"] }
+          }
+        }
+      ]
+    }
+  ]
+}
