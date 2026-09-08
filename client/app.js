@@ -417,8 +417,8 @@ async function loadYearChart() {
 }
 
 async function loadArtistChart() {
-  const data = await fetchJSON(`${API_BASE}/stats/artist-rarity?limit=-1`);
-  document.getElementById('chart-artist-wrap').style.height = `${Math.max(620, data.length * 16)}px`;
+  const data = await fetchJSON(`${API_BASE}/stats/artist-rarity?limit=10`);
+  document.getElementById('chart-artist-wrap').style.height = `${Math.max(320, data.length * 36)}px`;
   const ctx = document.getElementById('chart-artist');
   charts.artist = new Chart(ctx, {
     type: 'bar',

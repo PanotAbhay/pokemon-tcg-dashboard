@@ -32,6 +32,3 @@ CLAUDE.md
 # Data (raw source kept out of git if large; processed output is small and useful to keep)
 # Uncomment the next line if the raw CSV is too large for your repo host:
 # data/raw/*.csv
-
-# Env
-.env

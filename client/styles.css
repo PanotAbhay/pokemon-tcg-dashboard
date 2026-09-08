@@ -334,7 +334,7 @@ main {
 }
 
 .chart-wrap { position: relative; height: 240px; }
-.chart-wrap-tall { height: 620px; }
+.chart-wrap-tall { height: 320px; }
 
 /* ---------- Binder ---------- */
 
