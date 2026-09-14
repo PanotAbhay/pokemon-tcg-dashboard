@@ -15,6 +15,7 @@ Endpoints:
     GET /api/stats/overview   Headline numbers for the dashboard
     GET /api/stats/rarity-by-year   Rarity-tier mix (% of that year's cards) per release year
     GET /api/stats/artist-rarity    Chase-card rate (share of non-base rarities) for top artists
+    GET /api/export/csv       Download the full processed dataset as a CSV file
 """
 
 import os
@@ -22,13 +23,21 @@ import math
 import pandas as pd
 from flask import Flask, jsonify, request, send_from_directory
 from flask_cors import CORS
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
 
 DATA_PATH = os.path.join(os.path.dirname(__file__), "..", "data", "processed", "pokemon_cards_clean.csv")
+DATA_DIR = os.path.dirname(DATA_PATH)
+DATA_FILENAME = os.path.basename(DATA_PATH)
 CLIENT_DIR = os.path.join(os.path.dirname(__file__), "..", "client")
 DATE_FMT = "%Y-%m-%d"
 
 app = Flask(__name__, static_folder=CLIENT_DIR, static_url_path="")
 CORS(app)  # enable CORS for all routes so the client can be served separately
+
+# In-memory storage is fine here: single process, no auth, small dataset — no need
+# for Redis/Memcached the way a multi-worker/multi-host deployment would require.
+limiter = Limiter(app=app, key_func=get_remote_address, storage_uri="memory://", default_limits=[])
 
 # Load once at startup; the dataset is small enough (~17k rows) to keep in memory.
 df = pd.read_csv(DATA_PATH, parse_dates=["release_date"])
@@ -326,6 +335,13 @@ def stats_by_year():
 @app.route("/api/stats/rarity-by-year")
 def stats_rarity_by_year():
     return jsonify(STATS_RARITY_BY_YEAR)
+
+
+@app.route("/api/export/csv")
+@limiter.limit("10 per minute")
+def export_csv():
+    """Download the full processed dataset as a CSV file."""
+    return send_from_directory(DATA_DIR, DATA_FILENAME, as_attachment=True, download_name="pokemon_cards.csv")
 
 
 @app.route("/api/stats/artist-rarity")

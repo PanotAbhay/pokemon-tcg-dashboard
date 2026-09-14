@@ -836,6 +836,7 @@ async function init() {
   wireTabs();
   wireEvents();
   wireCardModal();
+  document.getElementById('export-csv-btn').href = `${API_BASE}/export/csv`;
 
   // Connection-status dot only; don't block tab/filter/card loading on it.
   fetchJSON(`${API_BASE}/health`)
